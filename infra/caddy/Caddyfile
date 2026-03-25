@@ -1,0 +1,5 @@
+# Direct :3400 mode does not use Caddy.
+# Run the Node server itself on 0.0.0.0:3400 and expose TCP 3400 externally.
+#
+# Example direct endpoint:
+# http://api.setupmaru.com:3400/api/health

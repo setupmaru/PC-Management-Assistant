@@ -1,0 +1,6 @@
+const asar = require('./node_modules/@electron/asar')
+const list = asar.listPackage('./release/win-unpacked/resources/app.asar')
+const nonNM = list.filter(f => !f.includes('node_modules'))
+console.log('Non-node_modules entries:')
+console.log(nonNM.slice(0, 30).join('\n') || '(none)')
+console.log('\nTotal entries:', list.length)

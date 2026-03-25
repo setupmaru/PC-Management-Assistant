@@ -1,0 +1,114 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg-base: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-elevated: #263249;
+  --bg-hover: #2d3a52;
+  --border: #334155;
+  --border-subtle: #1e293b;
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  --accent-blue: #3b82f6;
+  --accent-blue-dim: #1d4ed8;
+  --accent-green: #22c55e;
+  --accent-yellow: #eab308;
+  --accent-red: #ef4444;
+  --accent-orange: #f97316;
+  --accent-purple: #a855f7;
+
+  --titlebar-height: 40px;
+  --sidebar-width: 380px;
+
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--bg-base);
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 스크롤바 커스텀 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-surface);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* 마크다운 스타일 */
+.markdown-body {
+  line-height: 1.65;
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+  margin: 12px 0 6px;
+  font-weight: 600;
+}
+.markdown-body h1 { font-size: 1.2em; color: var(--text-primary); }
+.markdown-body h2 { font-size: 1.1em; color: var(--text-primary); }
+.markdown-body h3 { font-size: 1em; color: var(--accent-blue); }
+.markdown-body p { margin: 6px 0; }
+.markdown-body ul, .markdown-body ol {
+  padding-left: 18px;
+  margin: 6px 0;
+}
+.markdown-body li { margin: 3px 0; }
+.markdown-body code {
+  background: var(--bg-elevated);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.85em;
+  color: var(--accent-blue);
+}
+.markdown-body pre {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  margin: 8px 0;
+  overflow-x: auto;
+}
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+  color: var(--text-primary);
+}
+.markdown-body blockquote {
+  border-left: 3px solid var(--accent-blue);
+  padding-left: 12px;
+  margin: 8px 0;
+  color: var(--text-secondary);
+}
+.markdown-body strong { color: var(--text-primary); font-weight: 600; }
+.markdown-body em { color: var(--text-secondary); }
+.markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+}
+.markdown-body th, .markdown-body td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+.markdown-body th { background: var(--bg-elevated); font-weight: 600; }
+.markdown-body hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }

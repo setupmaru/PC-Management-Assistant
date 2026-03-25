@@ -1,0 +1,45 @@
+{
+  "name": "pc-management-assistant",
+  "version": "1.0.6",
+  "description": "PC management assistant - Windows diagnostics and OpenAI chat",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "server:dev": "cd server && npx ts-node src/index.ts"
+  },
+  "keywords": [
+    "electron",
+    "pc-management",
+    "openai-ai",
+    "system-monitor"
+  ],
+  "author": "PC Management Assistant",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.36.3",
+    "chart.js": "^4.4.7",
+    "electron-store": "^8.2.0",
+    "electron-updater": "^6.3.9",
+    "marked": "^15.0.6",
+    "react": "^19.0.0",
+    "react-chartjs-2": "^5.2.0",
+    "react-dom": "^19.0.0",
+    "systeminformation": "^5.23.14",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "vite-plugin-electron": "^0.28.8",
+    "vite-plugin-electron-renderer": "^0.14.6"
+  }
+}

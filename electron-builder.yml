@@ -1,0 +1,51 @@
+appId: com.pcmanagement.assistant
+productName: PC Management Assistant
+directories:
+  buildResources: resources
+  output: release
+
+# asar 대신 직접 파일 복사 (경로 문제 회피)
+asar: false
+
+files:
+  - from: dist
+    to: dist
+    filter:
+      - "**/*"
+      - "!**/*.map"
+  - from: dist-electron
+    to: dist-electron
+    filter:
+      - "**/*"
+      - "!**/*.map"
+  - package.json
+
+extraFiles:
+  - from: pc-assistant.config.json
+    to: pc-assistant.config.json
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.ico
+  artifactName: "PC-Management-Assistant-${version}-setup.${ext}"
+  # 코드 서명 비활성화 (개인용 빌드)
+  sign: null
+  forceCodeSigning: false
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: "PC Management Assistant"
+  language: "1042"
+
+publish:
+  provider: github
+  owner: setupmaru
+  repo: PC-Management-Assistant
+  releaseType: release
+  vPrefixedTagName: true

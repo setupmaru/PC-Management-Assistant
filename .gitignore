@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-electron/
+dist-ts/
+release/
+release-alt/
+build_tmp/
+.env
+.env.local
+server/node_modules/
+server/dist/
+server/.env
+infra/*.log
