@@ -13,14 +13,18 @@ export default function CpuCard() {
 
   const usage = cpu?.usage ?? 0
   const color = getColor(usage)
+  const hasHybridCores = (cpu?.performanceCores ?? 0) > 0 && (cpu?.efficiencyCores ?? 0) > 0
+  const coreText = hasHybridCores
+    ? `총 ${cpu?.cores ?? 0}코어 · P ${cpu?.performanceCores ?? 0} / E ${cpu?.efficiencyCores ?? 0}`
+    : `${cpu?.cores ?? 0}코어`
 
   return (
     <div style={styles.card}>
       <div style={styles.header}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={styles.icon}>
-          <rect x="4" y="4" width="16" height="16" rx="2"/>
-          <rect x="9" y="9" width="6" height="6"/>
-          <path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/>
+          <rect x="4" y="4" width="16" height="16" rx="2" />
+          <rect x="9" y="9" width="6" height="6" />
+          <path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2" />
         </svg>
         <div style={styles.titleWrap}>
           <span style={styles.label}>CPU</span>
@@ -33,7 +37,6 @@ export default function CpuCard() {
         <span style={styles.unit}>%</span>
       </div>
 
-      {/* 게이지 바 */}
       <div style={styles.barBg}>
         <div style={{ ...styles.barFill, width: `${usage}%`, background: color }} />
       </div>
@@ -41,7 +44,7 @@ export default function CpuCard() {
       <div style={styles.footer}>
         {cpu && (
           <>
-            <span style={styles.meta}>{cpu.cores}코어 · {cpu.speed.toFixed(1)}GHz</span>
+            <span style={styles.meta}>{coreText} · {cpu.speed.toFixed(1)}GHz</span>
             {cpu.temperature && (
               <span style={{ ...styles.meta, color: cpu.temperature > 80 ? '#ef4444' : '#94a3b8' }}>
                 {cpu.temperature}°C

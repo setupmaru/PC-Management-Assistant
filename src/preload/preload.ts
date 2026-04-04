@@ -4,7 +4,15 @@ import { AppUpdateState } from '../shared/updater'
 
 export interface SystemMetricsUpdate {
   metrics: {
-    cpu: { usage: number; cores: number; speed: number; model?: string; temperature?: number }
+    cpu: {
+      usage: number
+      cores: number
+      performanceCores?: number
+      efficiencyCores?: number
+      speed: number
+      model?: string
+      temperature?: number
+    }
     memory: { total: number; used: number; free: number; usagePercent: number }
     disks: { mount: string; fs: string; size: number; used: number; usagePercent: number }[]
     network: { iface: string; rxSec: number; txSec: number }[]

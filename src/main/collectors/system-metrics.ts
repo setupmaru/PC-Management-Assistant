@@ -3,6 +3,8 @@ import si from 'systeminformation'
 export interface CpuMetrics {
   usage: number
   cores: number
+  performanceCores?: number
+  efficiencyCores?: number
   speed: number
   model?: string
   temperature?: number
@@ -69,6 +71,8 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
   const cpu: CpuMetrics = {
     usage: cpuLoad ? Math.round(cpuLoad.currentLoad) : 0,
     cores: cpuInfo ? cpuInfo.physicalCores : 0,
+    performanceCores: cpuInfo?.performanceCores,
+    efficiencyCores: cpuInfo?.efficiencyCores,
     speed: cpuInfo ? cpuInfo.speed : 0,
     model: cpuInfo?.brand || undefined,
     temperature: tempInfo?.main && tempInfo.main > 0 ? tempInfo.main : undefined,
