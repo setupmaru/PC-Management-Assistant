@@ -22,28 +22,22 @@ export default function UpdateBanner() {
 
   switch (updateState.status) {
     case 'available':
-      message = `Version ${updateState.availableVersion ?? ''} is available. Click once to download and install.`
-      actionLabel = 'Update now'
+      message = `Version ${updateState.availableVersion ?? ''} was found. Download will start automatically.`
       break
     case 'downloading':
       message = `Downloading update ${formatProgress(updateState.progressPercent)}`
-      actionLabel = 'Downloading'
-      disabled = true
       break
     case 'downloaded':
       message = `Installing version ${updateState.availableVersion ?? ''}. The app will restart soon.`
-      actionLabel = 'Installing'
-      disabled = true
       break
     case 'error':
       message = updateState.error
         ? `Update failed: ${updateState.error}`
         : 'The update process failed.'
-      actionLabel = updateState.availableVersion ? 'Retry' : ''
+      actionLabel = 'Retry check'
       accent = '#f59e0b'
       background = 'rgba(245,158,11,0.08)'
       border = 'rgba(245,158,11,0.25)'
-      disabled = !updateState.availableVersion
       break
     default:
       return null
@@ -53,7 +47,9 @@ export default function UpdateBanner() {
     if (disabled || isApplying || !actionLabel) return
     setIsApplying(true)
     try {
-      const result = await window.api.updater.apply()
+      const result = updateState.status === 'error'
+        ? await window.api.updater.check()
+        : await window.api.updater.apply()
       if (!result.success && result.error) {
         alert(result.error)
       }

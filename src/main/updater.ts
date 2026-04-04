@@ -3,6 +3,7 @@ import { autoUpdater } from 'electron-updater'
 import { AppUpdateState } from '../shared/updater'
 
 const UPDATE_STATE_CHANNEL = 'app:updateState'
+const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000
 
 function createInitialState(): AppUpdateState {
   return {
@@ -23,6 +24,7 @@ export class AppUpdater {
   private initialized = false
   private downloadPromise: Promise<string[]> | null = null
   private installScheduled = false
+  private checkTimer: ReturnType<typeof setInterval> | null = null
   private state: AppUpdateState = createInitialState()
 
   setWindow(window: BrowserWindow | null): void {
@@ -36,6 +38,7 @@ export class AppUpdater {
 
     ipcMain.handle('updater:getState', async () => this.getState())
     ipcMain.handle('updater:apply', async () => this.applyUpdate())
+    ipcMain.handle('updater:check', async () => this.checkForUpdates())
 
     if (isDev || !app.isPackaged) {
       this.setState({
@@ -46,7 +49,7 @@ export class AppUpdater {
       return
     }
 
-    autoUpdater.autoDownload = false
+    autoUpdater.autoDownload = true
     autoUpdater.autoInstallOnAppQuit = false
 
     autoUpdater.on('checking-for-update', () => {
@@ -124,14 +127,10 @@ export class AppUpdater {
       })
     })
 
-    void autoUpdater.checkForUpdates().catch((error) => {
-      this.setState({
-        enabled: true,
-        status: 'error',
-        error: error?.message ?? String(error),
-        checkedAt: Date.now(),
-      })
-    })
+    void this.checkForUpdates()
+    this.checkTimer = setInterval(() => {
+      void this.checkForUpdates()
+    }, UPDATE_CHECK_INTERVAL_MS)
   }
 
   getState(): AppUpdateState {
@@ -177,6 +176,26 @@ export class AppUpdater {
       this.setState({
         status: 'error',
         error: message,
+      })
+      return { success: false, error: message }
+    }
+  }
+
+  async checkForUpdates(): Promise<{ success: boolean; error?: string }> {
+    if (this.state.status === 'downloading' || this.state.status === 'downloaded') {
+      return { success: true }
+    }
+
+    try {
+      await autoUpdater.checkForUpdates()
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.setState({
+        enabled: true,
+        status: 'error',
+        error: message,
+        checkedAt: Date.now(),
       })
       return { success: false, error: message }
     }

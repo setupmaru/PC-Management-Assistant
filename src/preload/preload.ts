@@ -230,6 +230,8 @@ const api = {
   updater: {
     getState: () =>
       ipcRenderer.invoke('updater:getState') as Promise<AppUpdateState>,
+    check: () =>
+      ipcRenderer.invoke('updater:check') as Promise<UpdateApplyResult>,
     apply: () =>
       ipcRenderer.invoke('updater:apply') as Promise<UpdateApplyResult>,
     onStateChange: (cb: (state: AppUpdateState) => void) => {
