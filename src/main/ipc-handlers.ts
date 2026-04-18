@@ -15,10 +15,10 @@ import {
   clearRefreshToken,
 } from './store'
 
-const DEV_DEFAULT_API_BASE = 'http://api.setupmaru.com:3400/api'
+const LOCALHOST_FALLBACK_API_BASE = 'http://localhost:3400/api'
+const DEV_DEFAULT_API_BASE = LOCALHOST_FALLBACK_API_BASE
 const PACKAGED_DEFAULT_API_BASE = 'http://api.setupmaru.com:3400/api'
 const DEFAULT_LAN_API_BASE = 'http://192.168.0.117:3400/api'
-const LOCALHOST_FALLBACK_API_BASE = 'http://localhost:3400/api'
 const REMOTE_API_REQUEST_TIMEOUT_MS = 12000
 const LOCAL_API_REQUEST_TIMEOUT_MS = 4000
 const REMOTE_HEALTHCHECK_TIMEOUT_MS = 8000
@@ -189,8 +189,6 @@ function loadApiBasesFromConfig(): string[] {
 }
 
 function getLocalApiBases(): string[] {
-  if (app.isPackaged) return []
-
   const interfaces = os.networkInterfaces()
   const bases: string[] = []
 
@@ -215,17 +213,25 @@ function getApiBaseCandidates(): string[] {
     ...localConfigBases.filter((base) => shouldPreferLanBase(base)),
   ])
 
-  return dedupeBases([
-    lastReachableApiBase ?? '',
+  const remoteEnvBases = dedupeBases([
     ...collectApiBases(process.env.API_BASES),
     ...collectApiBases(process.env.API_BASE),
     ...collectApiBases(process.env.PUBLIC_BASE_URL),
+  ])
+  const localCandidateBases = dedupeBases([
+    ...collectApiBases(process.env.LOCAL_API_BASE),
     ...lanBases,
+    LOCALHOST_FALLBACK_API_BASE,
+    ...localBases,
+    ...localConfigBases,
+  ])
+
+  return dedupeBases([
+    ...localCandidateBases,
+    lastReachableApiBase ?? '',
+    ...remoteEnvBases,
     ...remoteConfigBases,
     getDefaultApiBase(),
-    ...(app.isPackaged ? [] : collectApiBases(process.env.LOCAL_API_BASE)),
-    ...(app.isPackaged ? [] : [LOCALHOST_FALLBACK_API_BASE]),
-    ...localBases,
   ])
 }
 
