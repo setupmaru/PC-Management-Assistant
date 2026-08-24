@@ -136,10 +136,28 @@ export default function RegisterScreen({ onSuccess, onGoLogin, initialVerificati
         <p style={styles.subtitle}>{phase === 'register' ? '새 계정 만들기' : '이메일 인증'}</p>
       </div>
 
+      <RegistrationSteps phase={phase} />
+
       {phase === 'register' ? (
         <div style={styles.form}>
+          <div style={styles.verificationNotice}>
+            <div style={styles.noticeIcon}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <path d="m3 7 9 6 9-6" />
+              </svg>
+            </div>
+            <div style={styles.noticeText}>
+              <strong style={styles.noticeTitle}>이메일 인증이 필요합니다</strong>
+              <span style={styles.noticeDescription}>회원가입 후 입력한 이메일로 6자리 인증번호를 보내드립니다.</span>
+            </div>
+          </div>
+
           <div style={styles.fieldGroup}>
-            <label style={styles.label}>이메일</label>
+            <div style={styles.labelRow}>
+              <label style={styles.label}>이메일</label>
+              <span style={styles.requiredBadge}>인증 필수</span>
+            </div>
             <input
               ref={emailRef}
               type="email"
@@ -188,7 +206,7 @@ export default function RegisterScreen({ onSuccess, onGoLogin, initialVerificati
             onClick={handleRegister}
             disabled={!canRegister}
           >
-            {loading ? <LoadingLabel label="가입 중..." /> : '회원가입'}
+            {loading ? <LoadingLabel label="인증번호 전송 중..." /> : '인증번호 받고 계속하기'}
           </button>
         </div>
       ) : (
@@ -249,6 +267,28 @@ export default function RegisterScreen({ onSuccess, onGoLogin, initialVerificati
   )
 }
 
+function RegistrationSteps({ phase }: { phase: Phase }) {
+  const verifying = phase === 'verify'
+
+  return (
+    <div style={styles.steps} aria-label="회원가입 진행 단계">
+      <div style={styles.step}>
+        <span style={{ ...styles.stepCircle, ...(verifying ? styles.stepComplete : styles.stepActive) }}>
+          {verifying ? '✓' : '1'}
+        </span>
+        <span style={{ ...styles.stepLabel, ...(verifying ? styles.stepLabelComplete : styles.stepLabelActive) }}>
+          계정 정보
+        </span>
+      </div>
+      <span style={{ ...styles.stepLine, ...(verifying ? styles.stepLineActive : {}) }} />
+      <div style={styles.step}>
+        <span style={{ ...styles.stepCircle, ...(verifying ? styles.stepActive : {}) }}>2</span>
+        <span style={{ ...styles.stepLabel, ...(verifying ? styles.stepLabelActive : {}) }}>이메일 인증</span>
+      </div>
+    </div>
+  )
+}
+
 function StatusMessage({ kind, message }: { kind: 'error' | 'info'; message: string }) {
   return (
     <div style={kind === 'error' ? styles.errorMsg : styles.infoMsg}>
@@ -305,9 +345,70 @@ const styles: Record<string, React.CSSProperties> = {
   },
   appName: { fontSize: 16, fontWeight: 700, color: '#f1f5f9', margin: 0 },
   subtitle: { fontSize: 13, color: '#64748b', margin: 0 },
+  steps: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  step: { display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 },
+  stepCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: '50%',
+    border: '1px solid #475569',
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: 700,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxSizing: 'border-box',
+  },
+  stepActive: { borderColor: '#3b82f6', background: '#2563eb', color: '#fff' },
+  stepComplete: { borderColor: '#22c55e', background: 'rgba(34,197,94,0.15)', color: '#86efac' },
+  stepLabel: { fontSize: 12, fontWeight: 600, color: '#64748b' },
+  stepLabelActive: { color: '#bfdbfe' },
+  stepLabelComplete: { color: '#86efac' },
+  stepLine: { height: 1, background: '#334155', flex: 1, maxWidth: 52, margin: '0 10px' },
+  stepLineActive: { background: '#22c55e' },
   form: { width: '100%', display: 'flex', flexDirection: 'column', gap: 12 },
   fieldGroup: { display: 'flex', flexDirection: 'column', gap: 4 },
+  labelRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
   label: { fontSize: 12, fontWeight: 600, color: '#94a3b8' },
+  requiredBadge: {
+    fontSize: 10,
+    fontWeight: 700,
+    color: '#93c5fd',
+    background: 'rgba(59,130,246,0.12)',
+    border: '1px solid rgba(59,130,246,0.28)',
+    borderRadius: 999,
+    padding: '2px 7px',
+  },
+  verificationNotice: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    color: '#bfdbfe',
+    background: 'rgba(37,99,235,0.1)',
+    border: '1px solid rgba(59,130,246,0.25)',
+    borderRadius: 10,
+    padding: '10px 12px',
+  },
+  noticeIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    background: 'rgba(59,130,246,0.16)',
+    color: '#60a5fa',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  noticeText: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 },
+  noticeTitle: { fontSize: 12, color: '#dbeafe' },
+  noticeDescription: { fontSize: 11, lineHeight: 1.45, color: '#93c5fd' },
   input: {
     width: '100%',
     background: '#0f172a',
