@@ -102,3 +102,29 @@ jobs:
               --generate-notes `
               --latest
           }
+
+      - name: Verify published GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = node -p "require('./package.json').version"
+          $release = gh release view $env:GITHUB_REF_NAME `
+            --json tagName,name,isLatest,assets | ConvertFrom-Json
+          $assetNames = @($release.assets | ForEach-Object { $_.name })
+          $requiredAssets = @(
+            "PC-Management-Assistant-$version-setup.exe",
+            "PC-Management-Assistant-$version-windows-portable.zip"
+          )
+
+          if ($release.tagName -ne $env:GITHUB_REF_NAME -or $release.name -ne "V$version") {
+            throw 'The published release tag or title is incorrect.'
+          }
+          if (-not $release.isLatest) {
+            throw 'The published release is not marked as Latest.'
+          }
+          foreach ($asset in $requiredAssets) {
+            if ($assetNames -notcontains $asset) {
+              throw "Required release asset is missing: $asset"
+            }
+          }
