@@ -11,6 +11,7 @@ npm version patch
 git push origin main --follow-tags
 ```
 
-The workflow verifies that the tag matches `package.json`, builds on `windows-latest`, and attaches
+The workflow verifies that the tag matches `package.json`, builds with Node.js 24 on
+`windows-latest`, and attaches
 the installer, blockmap, and `latest.yml` to a GitHub Release. The API server remains a separate
 systemd deployment and is not changed by this workflow.
