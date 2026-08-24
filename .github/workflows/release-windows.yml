@@ -40,8 +40,29 @@ jobs:
       - name: Build application
         run: npm run build
 
+      - name: Build Windows portable app
+        run: npx electron-builder --win --dir --config.win.signAndEditExecutable=false
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          Compress-Archive `
+            -Path 'release/win-unpacked/*' `
+            -DestinationPath "release/PC-Management-Assistant-$version-windows-portable.zip" `
+            -CompressionLevel Optimal
+
       - name: Build Windows installer
+        id: installer
+        continue-on-error: true
         run: npx electron-builder --win --config.win.signAndEditExecutable=false
+
+      - name: Note installer fallback
+        if: steps.installer.outcome == 'failure'
+        shell: pwsh
+        run: |
+          'NSIS installer generation failed; the portable Windows ZIP will be published instead.' |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
 
       - name: Publish GitHub Release
         shell: pwsh
@@ -49,7 +70,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $assets = Get-ChildItem release -File | Where-Object {
-            $_.Extension -in '.exe', '.blockmap' -or $_.Name -eq 'latest.yml'
+            $_.Extension -in '.exe', '.blockmap', '.zip' -or $_.Name -eq 'latest.yml'
           } | ForEach-Object { $_.FullName }
 
           if ($assets.Count -eq 0) {

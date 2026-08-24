@@ -12,6 +12,7 @@ git push origin main --follow-tags
 ```
 
 The workflow verifies that the tag matches `package.json`, builds with Node.js 24 on
-`windows-latest`, and attaches
-the installer, blockmap, and `latest.yml` to a GitHub Release. The API server remains a separate
+`windows-latest`, and always attaches a portable Windows ZIP to a GitHub Release. It also attempts
+to attach the installer, blockmap, and `latest.yml`; an installer failure does not block the
+portable release. The API server remains a separate
 systemd deployment and is not changed by this workflow.
