@@ -8,6 +8,8 @@ interface Props {
 
 interface ConnectionInfo {
   reachable: boolean
+  apiRunning: boolean
+  databaseRunning: boolean
   activeBase: string
   triedBases: string[]
   error?: string
@@ -36,6 +38,8 @@ export default function LoginScreen({ onSuccess, onGoRegister, onVerificationReq
         if (!mounted) return
         setConnectionInfo({
           reachable: false,
+          apiRunning: false,
+          databaseRunning: false,
           activeBase: '',
           triedBases: [],
           error: 'Failed to read API connection status.',
@@ -86,6 +90,7 @@ export default function LoginScreen({ onSuccess, onGoRegister, onVerificationReq
   }
 
   const canSubmit = !!email && !!password && !loading
+  const connectionStatus = connectionInfo ? getConnectionStatus(connectionInfo) : null
 
   return (
     <div style={styles.card}>
@@ -97,36 +102,26 @@ export default function LoginScreen({ onSuccess, onGoRegister, onVerificationReq
           </svg>
         </div>
         <h1 style={styles.appName}>PC Management Assistant</h1>
-        <p style={styles.subtitle}>Sign in to continue</p>
+        <p style={styles.subtitle}>로그인하여 계속하기</p>
       </div>
 
       {connectionInfo && (
         <div
           style={{
             ...styles.connectionCard,
-            borderColor: connectionInfo.reachable ? 'rgba(74, 222, 128, 0.28)' : 'rgba(248, 113, 113, 0.28)',
-            background: connectionInfo.reachable ? 'rgba(22, 101, 52, 0.14)' : 'rgba(127, 29, 29, 0.14)',
+            borderColor: connectionStatus?.ready ? 'rgba(74, 222, 128, 0.28)' : 'rgba(248, 113, 113, 0.28)',
+            background: connectionStatus?.ready ? 'rgba(22, 101, 52, 0.14)' : 'rgba(127, 29, 29, 0.14)',
           }}
         >
           <div
             style={{
               ...styles.connectionBadge,
-              color: connectionInfo.reachable ? '#86efac' : '#fca5a5',
+              color: connectionStatus?.ready ? '#86efac' : '#fca5a5',
             }}
           >
-            {connectionInfo.reachable ? 'API connected' : 'API unreachable'}
+            {connectionStatus?.title}
           </div>
-          <div style={styles.connectionText}>
-            <strong>Active base:</strong> {connectionInfo.activeBase || 'not configured'}
-          </div>
-          {connectionInfo.triedBases.length > 1 && (
-            <div style={styles.connectionText}>
-              <strong>Tried:</strong> {connectionInfo.triedBases.join(', ')}
-            </div>
-          )}
-          {!connectionInfo.reachable && connectionInfo.error && (
-            <div style={{ ...styles.connectionText, color: '#fecaca' }}>{connectionInfo.error}</div>
-          )}
+          <div style={styles.connectionText}>{connectionStatus?.message}</div>
         </div>
       )}
 
@@ -197,20 +192,44 @@ export default function LoginScreen({ onSuccess, onGoRegister, onVerificationReq
           {loading ? (
             <span style={styles.spinnerWrapper}>
               <span style={styles.spinner} />
-              Signing in...
+              로그인 중...
             </span>
-          ) : 'Sign in'}
+          ) : '로그인'}
         </button>
       </div>
 
       <p style={styles.registerLink}>
-        Need an account?{' '}
+        계정이 없으신가요?{' '}
         <button style={styles.linkBtn} onClick={onGoRegister}>
-          Create one
+          회원가입
         </button>
       </p>
     </div>
   )
+}
+
+function getConnectionStatus(info: ConnectionInfo): { ready: boolean; title: string; message: string } {
+  if (info.apiRunning && info.databaseRunning) {
+    return {
+      ready: true,
+      title: '로그인 가능',
+      message: 'API와 DB가 모두 켜져 있습니다.',
+    }
+  }
+
+  if (info.apiRunning) {
+    return {
+      ready: false,
+      title: '로그인 불가',
+      message: 'DB가 실행이 안되었습니다.',
+    }
+  }
+
+  return {
+    ready: false,
+    title: '로그인 불가',
+    message: 'API/DB가 실행이 안되었습니다.',
+  }
 }
 
 const styles: Record<string, React.CSSProperties> = {

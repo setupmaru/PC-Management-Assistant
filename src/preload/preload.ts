@@ -88,6 +88,8 @@ export interface User {
 
 export interface AuthConnectionInfo {
   reachable: boolean
+  apiRunning: boolean
+  databaseRunning: boolean
   activeBase: string
   triedBases: string[]
   error?: string

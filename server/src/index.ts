@@ -2,7 +2,7 @@ import cors from 'cors'
 import express from 'express'
 import helmet from 'helmet'
 
-import { closePool } from './config/db'
+import pool, { closePool } from './config/db'
 import { ALLOWED_ORIGINS, IS_PRODUCTION, NODE_ENV } from './config/env'
 import { HOST, PORT, PUBLIC_BASE_URL } from './config/app'
 import authRouter from './routes/auth'
@@ -36,13 +36,30 @@ app.use('/api/billing', billingRouter)
 app.use('/api/toss/webhook', webhookRouter)
 app.use('/api/windows-update', windowsUpdateRouter)
 
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() })
-})
+async function handleHealthCheck(_req: express.Request, res: express.Response): Promise<void> {
+  const timestamp = new Date().toISOString()
 
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() })
-})
+  try {
+    await pool.query('SELECT 1')
+    res.json({
+      status: 'ok',
+      api: { reachable: true },
+      db: { reachable: true },
+      timestamp,
+    })
+  } catch (error) {
+    console.error('[health] Database health check failed:', error)
+    res.status(503).json({
+      status: 'degraded',
+      api: { reachable: true },
+      db: { reachable: false },
+      timestamp,
+    })
+  }
+}
+
+app.get('/api/health', handleHealthCheck)
+app.get('/health', handleHealthCheck)
 
 const server = app.listen(PORT, HOST, () => {
   console.log(`[server] PC Assistant API server listening on ${HOST}:${PORT}`)

@@ -55,6 +55,8 @@ interface ConflictSession {
 
 interface ApiConnectionInfo {
   reachable: boolean
+  apiRunning: boolean
+  databaseRunning: boolean
   activeBase: string
   triedBases: string[]
   error?: string
@@ -362,6 +364,8 @@ async function getApiConnectionInfo(): Promise<ApiConnectionInfo> {
   if (triedBases.length === 0) {
     return {
       reachable: false,
+      apiRunning: false,
+      databaseRunning: false,
       activeBase: '',
       triedBases: [],
       error: 'API base is not configured.',
@@ -378,12 +382,28 @@ async function getApiConnectionInfo(): Promise<ApiConnectionInfo> {
       const response = await performApiRequest(buildUrl(base, '/health'), {
         signal: controller.signal,
       })
+      const health = await response.json().catch(() => ({})) as {
+        api?: string | { reachable?: boolean }
+        database?: string | { reachable?: boolean }
+        db?: { reachable?: boolean }
+      }
+      const apiRunning = health.api === 'ok'
+        || (typeof health.api === 'object' && health.api?.reachable === true)
+        || response.status === 200
+        || response.status === 503
+      const databaseRunning = health.database === 'ok'
+        || (typeof health.database === 'object' && health.database?.reachable === true)
+        || health.db?.reachable === true
       lastReachableApiBase = base
       return {
-        reachable: response.ok,
+        reachable: apiRunning && databaseRunning,
+        apiRunning,
+        databaseRunning,
         activeBase: base,
         triedBases,
-        error: response.ok ? undefined : `Health check failed with status ${response.status}.`,
+        error: apiRunning && databaseRunning
+          ? undefined
+          : `Health check failed with status ${response.status}.`,
       }
     } catch (err) {
       lastError = err
@@ -394,6 +414,8 @@ async function getApiConnectionInfo(): Promise<ApiConnectionInfo> {
 
   return {
     reachable: false,
+    apiRunning: false,
+    databaseRunning: false,
     activeBase: triedBases[0],
     triedBases,
     error: formatNetworkError(new ApiFetchError(triedBases[0], lastError, triedBases)),
@@ -639,6 +661,8 @@ export function registerIpcHandlers(
     } catch (err) {
       return {
         reachable: false,
+        apiRunning: false,
+        databaseRunning: false,
         activeBase: '',
         triedBases: getApiBaseCandidates(),
         error: err instanceof Error ? err.message : String(err),
