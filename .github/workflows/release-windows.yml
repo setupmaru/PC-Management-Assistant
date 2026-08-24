@@ -93,14 +93,21 @@ jobs:
             throw 'No release assets were generated.'
           }
 
-          if (gh release view $env:GITHUB_REF_NAME 2>$null) {
-            gh release edit $env:GITHUB_REF_NAME --title "V$version" --latest
-            gh release upload $env:GITHUB_REF_NAME @assets --clobber
-          } else {
-            gh release create $env:GITHUB_REF_NAME @assets `
-              --title "V$version" `
-              --generate-notes `
-              --latest
+          & gh release view $env:GITHUB_REF_NAME --json tagName *> $null
+          if ($LASTEXITCODE -eq 0) {
+            & gh release delete $env:GITHUB_REF_NAME --yes
+            if ($LASTEXITCODE -ne 0) {
+              throw 'Failed to remove the existing GitHub Release.'
+            }
+          }
+
+          & gh release create $env:GITHUB_REF_NAME @assets `
+            --verify-tag `
+            --title "V$version" `
+            --generate-notes `
+            --latest
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Failed to create the GitHub Release.'
           }
 
       - name: Verify published GitHub Release
@@ -109,8 +116,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $version = node -p "require('./package.json').version"
-          $release = gh release view $env:GITHUB_REF_NAME `
-            --json tagName,name,isLatest,assets | ConvertFrom-Json
+          $releaseJson = & gh release view $env:GITHUB_REF_NAME --json tagName,name,assets
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Failed to read the published GitHub Release.'
+          }
+          $release = $releaseJson | ConvertFrom-Json
+          $latestTag = & gh api "repos/$env:GITHUB_REPOSITORY/releases/latest" --jq .tag_name
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Failed to read the Latest GitHub Release.'
+          }
           $assetNames = @($release.assets | ForEach-Object { $_.name })
           $requiredAssets = @(
             "PC-Management-Assistant-$version-setup.exe",
@@ -120,7 +134,7 @@ jobs:
           if ($release.tagName -ne $env:GITHUB_REF_NAME -or $release.name -ne "V$version") {
             throw 'The published release tag or title is incorrect.'
           }
-          if (-not $release.isLatest) {
+          if ($latestTag -ne $env:GITHUB_REF_NAME) {
             throw 'The published release is not marked as Latest.'
           }
           foreach ($asset in $requiredAssets) {
