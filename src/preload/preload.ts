@@ -112,12 +112,30 @@ const api = {
         success: boolean
         user?: User
         error?: string
+        verificationRequired?: boolean
+        email?: string
       }>,
     register: (email: string, password: string) =>
       ipcRenderer.invoke('auth:register', email, password) as Promise<{
         success: boolean
         user?: User
         error?: string
+        verificationRequired?: boolean
+        email?: string
+        message?: string
+      }>,
+    verifyEmail: (email: string, code: string) =>
+      ipcRenderer.invoke('auth:verifyEmail', email, code) as Promise<{
+        success: boolean
+        user?: User
+        error?: string
+      }>,
+    resendVerification: (email: string) =>
+      ipcRenderer.invoke('auth:resendVerification', email) as Promise<{
+        success: boolean
+        message?: string
+        error?: string
+        retryAfterSeconds?: number
       }>,
     refreshToken: () =>
       ipcRenderer.invoke('auth:refreshToken') as Promise<{

@@ -1,4 +1,4 @@
-﻿import { useEffect } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useAppStore } from './store/appStore'
 import { useSystemMetrics } from './hooks/useSystemMetrics'
 import DashboardPanel from './components/Dashboard/DashboardPanel'
@@ -11,6 +11,7 @@ import RegisterScreen from './components/Auth/RegisterScreen'
 import UpdateBanner from './components/Update/UpdateBanner'
 
 export default function App() {
+  const [verificationEmail, setVerificationEmail] = useState('')
   const {
     showSettings, setShowSettings, setApiKeyStatus,
     authStatus, setAuthStatus, setCurrentUser, setSubscriptionStatus,
@@ -81,6 +82,7 @@ export default function App() {
     setCurrentUser(user)
     setAuthStatus('authenticated')
     setShowRegister(false)
+    setVerificationEmail('')
   }
 
   // 로딩 화면
@@ -174,12 +176,23 @@ export default function App() {
             {showRegister ? (
               <RegisterScreen
                 onSuccess={handleAuthSuccess}
-                onGoLogin={() => setShowRegister(false)}
+                onGoLogin={() => {
+                  setVerificationEmail('')
+                  setShowRegister(false)
+                }}
+                initialVerificationEmail={verificationEmail || undefined}
               />
             ) : (
               <LoginScreen
                 onSuccess={handleAuthSuccess}
-                onGoRegister={() => setShowRegister(true)}
+                onGoRegister={() => {
+                  setVerificationEmail('')
+                  setShowRegister(true)
+                }}
+                onVerificationRequired={(email) => {
+                  setVerificationEmail(email)
+                  setShowRegister(true)
+                }}
               />
             )}
           </div>

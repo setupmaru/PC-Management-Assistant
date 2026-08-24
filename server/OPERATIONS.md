@@ -6,6 +6,8 @@
 - Set `PUBLIC_BASE_URL=http://api.setupmaru.com:3400`.
 - Set `ALLOWED_ORIGINS=http://api.setupmaru.com:3400`.
 - Fill in `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `TOSS_CLIENT_KEY`, and `TOSS_SECRET_KEY`.
+- Enable 2-Step Verification on the Gmail sender account, create a Google App Password, and set
+  `GMAIL_USER`, `GMAIL_APP_PASSWORD`, and `EMAIL_FROM`. Do not use the normal Gmail password.
 
 ## First run
 ```powershell
@@ -40,3 +42,24 @@ Minimal option:
 3. Run `npm run build` inside `server`.
 4. Restart the production process.
 5. Verify `/health` and `/api/health`.
+
+## Email verification checks
+
+New email accounts receive a six-digit code. The code expires after 10 minutes by default and
+can be resent after 60 seconds. Existing users are marked verified when the schema migration is
+first applied.
+
+Required production variables:
+
+```text
+GMAIL_USER=your-account@gmail.com
+GMAIL_APP_PASSWORD=your-google-app-password
+EMAIL_FROM=your-account@gmail.com
+EMAIL_VERIFICATION_SECRET=an-independent-random-secret
+```
+
+Apply the additive schema migration before restarting the API server:
+
+```bash
+psql "$DATABASE_URL" -f schema.sql
+```

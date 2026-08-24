@@ -3,6 +3,7 @@ import { KeyboardEvent, useEffect, useRef, useState } from 'react'
 interface Props {
   onSuccess: (user: { id: string; email: string; plan: 'free' | 'plus' | 'pro' }) => void
   onGoRegister: () => void
+  onVerificationRequired: (email: string) => void
 }
 
 interface ConnectionInfo {
@@ -12,7 +13,7 @@ interface ConnectionInfo {
   error?: string
 }
 
-export default function LoginScreen({ onSuccess, onGoRegister }: Props) {
+export default function LoginScreen({ onSuccess, onGoRegister, onVerificationRequired }: Props) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -64,6 +65,11 @@ export default function LoginScreen({ onSuccess, onGoRegister }: Props) {
 
     if (res.success && res.user) {
       onSuccess(res.user)
+      return
+    }
+
+    if (res.verificationRequired) {
+      onVerificationRequired(res.email ?? email.trim())
       return
     }
 

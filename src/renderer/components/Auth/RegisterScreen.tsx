@@ -1,21 +1,45 @@
-import { useState, useRef, useEffect, KeyboardEvent } from 'react'
+import { KeyboardEvent, useEffect, useRef, useState } from 'react'
 
 interface Props {
   onSuccess: (user: { id: string; email: string; plan: 'free' | 'plus' | 'pro' }) => void
   onGoLogin: () => void
+  initialVerificationEmail?: string
 }
 
-export default function RegisterScreen({ onSuccess, onGoLogin }: Props) {
-  const [email, setEmail] = useState('')
+type Phase = 'register' | 'verify'
+
+export default function RegisterScreen({ onSuccess, onGoLogin, initialVerificationEmail }: Props) {
+  const [phase, setPhase] = useState<Phase>(initialVerificationEmail ? 'verify' : 'register')
+  const [email, setEmail] = useState(initialVerificationEmail ?? '')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [code, setCode] = useState('')
   const [error, setError] = useState('')
+  const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
+  const [resending, setResending] = useState(false)
+  const [resendCooldown, setResendCooldown] = useState(0)
   const emailRef = useRef<HTMLInputElement>(null)
+  const codeRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    emailRef.current?.focus()
-  }, [])
+    if (phase === 'register') emailRef.current?.focus()
+    else codeRef.current?.focus()
+  }, [phase])
+
+  useEffect(() => {
+    if (!initialVerificationEmail) return
+    setEmail(initialVerificationEmail)
+    setPhase('verify')
+    setError('')
+    setInfo('이메일로 받은 6자리 인증번호를 입력해주세요.')
+  }, [initialVerificationEmail])
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = window.setTimeout(() => setResendCooldown((value) => value - 1), 1000)
+    return () => window.clearTimeout(timer)
+  }, [resendCooldown])
 
   const handleRegister = async () => {
     if (!email.trim()) { setError('이메일을 입력해주세요.'); return }
@@ -24,38 +48,95 @@ export default function RegisterScreen({ onSuccess, onGoLogin }: Props) {
 
     setLoading(true)
     setError('')
+    setInfo('')
 
     const res = await window.api.auth.register(email.trim(), password)
     setLoading(false)
 
+    if (res.success && res.verificationRequired) {
+      setEmail(res.email ?? email.trim())
+      setPassword('')
+      setConfirmPassword('')
+      setCode('')
+      setPhase('verify')
+      setResendCooldown(60)
+      setInfo(res.message ?? '입력한 이메일로 인증번호를 보냈습니다.')
+      return
+    }
+
     if (res.success && res.user) {
       onSuccess(res.user as { id: string; email: string; plan: 'free' | 'plus' | 'pro' })
-    } else {
-      setError(res.error ?? '회원가입에 실패했습니다.')
+      return
     }
+
+    setError(res.error ?? '회원가입에 실패했습니다.')
+  }
+
+  const handleVerify = async () => {
+    if (!/^\d{6}$/.test(code)) {
+      setError('6자리 인증번호를 입력해주세요.')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    setInfo('')
+
+    const res = await window.api.auth.verifyEmail(email, code)
+    setLoading(false)
+
+    if (res.success && res.user) {
+      onSuccess(res.user as { id: string; email: string; plan: 'free' | 'plus' | 'pro' })
+      return
+    }
+
+    setError(res.error ?? '이메일 인증에 실패했습니다.')
+    setCode('')
+    codeRef.current?.focus()
+  }
+
+  const handleResend = async () => {
+    if (resending || resendCooldown > 0) return
+
+    setResending(true)
+    setError('')
+    setInfo('')
+    const res = await window.api.auth.resendVerification(email)
+    setResending(false)
+
+    if (res.success) {
+      setResendCooldown(60)
+      setInfo(res.message ?? '인증번호를 다시 보냈습니다.')
+      return
+    }
+
+    if (res.retryAfterSeconds) setResendCooldown(res.retryAfterSeconds)
+    setError(res.error ?? '인증번호 재전송에 실패했습니다.')
   }
 
   const handleKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') handleRegister()
+    if (e.key !== 'Enter') return
+    if (phase === 'register') handleRegister()
+    else handleVerify()
   }
 
-  const canSubmit = !!email && !!password && !!confirmPassword && !loading
+  const canRegister = !!email && !!password && !!confirmPassword && !loading
+  const canVerify = /^\d{6}$/.test(code) && !loading
 
   return (
     <div style={styles.card}>
-        {/* 로고 */}
-        <div style={styles.logoArea}>
-          <div style={styles.logoCircle}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.8">
-              <rect x="2" y="3" width="20" height="14" rx="2"/>
-              <path d="M8 21h8M12 17v4"/>
-            </svg>
-          </div>
-          <h1 style={styles.appName}>PC Management Assistant</h1>
-          <p style={styles.subtitle}>새 계정 만들기</p>
+      <div style={styles.logoArea}>
+        <div style={styles.logoCircle}>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.8">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <path d="M8 21h8M12 17v4" />
+          </svg>
         </div>
+        <h1 style={styles.appName}>PC Management Assistant</h1>
+        <p style={styles.subtitle}>{phase === 'register' ? '새 계정 만들기' : '이메일 인증'}</p>
+      </div>
 
-        {/* 폼 */}
+      {phase === 'register' ? (
         <div style={styles.form}>
           <div style={styles.fieldGroup}>
             <label style={styles.label}>이메일</label>
@@ -100,39 +181,94 @@ export default function RegisterScreen({ onSuccess, onGoLogin }: Props) {
             />
           </div>
 
-          {error && (
-            <div style={styles.errorMsg}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8" x2="12" y2="12"/>
-                <line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
-              {error}
-            </div>
-          )}
+          {error && <StatusMessage kind="error" message={error} />}
 
           <button
-            style={{ ...styles.registerBtn, opacity: canSubmit ? 1 : 0.5, cursor: canSubmit ? 'pointer' : 'not-allowed' }}
+            style={{ ...styles.primaryBtn, opacity: canRegister ? 1 : 0.5, cursor: canRegister ? 'pointer' : 'not-allowed' }}
             onClick={handleRegister}
-            disabled={!canSubmit}
+            disabled={!canRegister}
           >
-            {loading ? (
-              <span style={styles.spinnerWrapper}>
-                <span style={styles.spinner} />
-                가입 중...
-              </span>
-            ) : '회원가입'}
+            {loading ? <LoadingLabel label="가입 중..." /> : '회원가입'}
           </button>
         </div>
+      ) : (
+        <div style={styles.form}>
+          <div style={styles.emailSummary}>
+            <span style={styles.emailSummaryLabel}>인증 이메일</span>
+            <strong style={styles.emailSummaryValue}>{email}</strong>
+          </div>
 
-        <p style={styles.loginLink}>
-          이미 계정이 있으신가요?{' '}
-          <button style={styles.linkBtn} onClick={onGoLogin}>
-            로그인
+          <div style={styles.fieldGroup}>
+            <label style={styles.label}>6자리 인증번호</label>
+            <input
+              ref={codeRef}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              style={{ ...styles.input, ...styles.codeInput, borderColor: error ? '#ef4444' : '#334155' }}
+              placeholder="000000"
+              value={code}
+              onChange={(e) => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setError('') }}
+              onKeyDown={handleKey}
+              disabled={loading}
+              autoComplete="one-time-code"
+            />
+          </div>
+
+          {info && <StatusMessage kind="info" message={info} />}
+          {error && <StatusMessage kind="error" message={error} />}
+
+          <button
+            style={{ ...styles.primaryBtn, opacity: canVerify ? 1 : 0.5, cursor: canVerify ? 'pointer' : 'not-allowed' }}
+            onClick={handleVerify}
+            disabled={!canVerify}
+          >
+            {loading ? <LoadingLabel label="인증 중..." /> : '인증하고 시작하기'}
           </button>
-        </p>
+
+          <button
+            style={{ ...styles.secondaryBtn, opacity: resending || resendCooldown > 0 ? 0.55 : 1 }}
+            onClick={handleResend}
+            disabled={resending || resendCooldown > 0}
+          >
+            {resending
+              ? '전송 중...'
+              : resendCooldown > 0
+                ? `${resendCooldown}초 후 재전송`
+                : '인증번호 다시 보내기'}
+          </button>
+        </div>
+      )}
+
+      <p style={styles.loginLink}>
+        이미 계정이 있으신가요?{' '}
+        <button style={styles.linkBtn} onClick={onGoLogin}>로그인</button>
+      </p>
     </div>
+  )
+}
+
+function StatusMessage({ kind, message }: { kind: 'error' | 'info'; message: string }) {
+  return (
+    <div style={kind === 'error' ? styles.errorMsg : styles.infoMsg}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="8" x2="12" y2="12" />
+        <line x1="12" y1="16" x2="12.01" y2="16" />
+      </svg>
+      {message}
+    </div>
+  )
+}
+
+function LoadingLabel({ label }: { label: string }) {
+  return (
+    <span style={styles.spinnerWrapper}>
+      <span style={styles.spinner} />
+      {label}
+    </span>
   )
 }
 
@@ -155,7 +291,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     gap: 8,
-    textAlign: 'center' as const,
+    textAlign: 'center',
   },
   logoCircle: {
     width: 56,
@@ -167,33 +303,11 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  appName: {
-    fontSize: 16,
-    fontWeight: 700,
-    color: '#f1f5f9',
-    margin: 0,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: '#64748b',
-    margin: 0,
-  },
-  form: {
-    width: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-  },
-  fieldGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: 600,
-    color: '#94a3b8',
-  },
+  appName: { fontSize: 16, fontWeight: 700, color: '#f1f5f9', margin: 0 },
+  subtitle: { fontSize: 13, color: '#64748b', margin: 0 },
+  form: { width: '100%', display: 'flex', flexDirection: 'column', gap: 12 },
+  fieldGroup: { display: 'flex', flexDirection: 'column', gap: 4 },
+  label: { fontSize: 12, fontWeight: 600, color: '#94a3b8' },
   input: {
     width: '100%',
     background: '#0f172a',
@@ -205,8 +319,26 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     fontFamily: 'inherit',
     transition: 'border-color 0.15s',
-    boxSizing: 'border-box' as const,
+    boxSizing: 'border-box',
   },
+  codeInput: {
+    fontSize: 24,
+    fontWeight: 700,
+    letterSpacing: 8,
+    textAlign: 'center',
+    paddingLeft: 22,
+  },
+  emailSummary: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+    background: '#0f172a',
+    border: '1px solid #334155',
+    borderRadius: 10,
+    padding: '10px 12px',
+  },
+  emailSummaryLabel: { fontSize: 11, color: '#64748b' },
+  emailSummaryValue: { fontSize: 13, color: '#cbd5e1', wordBreak: 'break-all' },
   errorMsg: {
     display: 'flex',
     alignItems: 'center',
@@ -218,7 +350,18 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 7,
     padding: '7px 10px',
   },
-  registerBtn: {
+  infoMsg: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    fontSize: 12,
+    color: '#93c5fd',
+    background: 'rgba(59,130,246,0.08)',
+    border: '1px solid rgba(59,130,246,0.2)',
+    borderRadius: 7,
+    padding: '7px 10px',
+  },
+  primaryBtn: {
     width: '100%',
     background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
     border: 'none',
@@ -226,20 +369,25 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#fff',
     fontSize: 14,
     fontWeight: 600,
-    padding: '12px',
-    transition: 'opacity 0.15s',
+    padding: 12,
     fontFamily: 'inherit',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     marginTop: 4,
   },
-  spinnerWrapper: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
+  secondaryBtn: {
+    width: '100%',
+    background: 'transparent',
+    border: '1px solid #475569',
+    borderRadius: 10,
+    color: '#94a3b8',
+    fontSize: 13,
+    padding: 10,
+    fontFamily: 'inherit',
+    cursor: 'pointer',
   },
+  spinnerWrapper: { display: 'flex', alignItems: 'center', gap: 8 },
   spinner: {
     width: 14,
     height: 14,
@@ -249,11 +397,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'inline-block',
     animation: 'spin 0.7s linear infinite',
   },
-  loginLink: {
-    fontSize: 13,
-    color: '#64748b',
-    margin: 0,
-  },
+  loginLink: { fontSize: 13, color: '#64748b', margin: 0 },
   linkBtn: {
     background: 'none',
     border: 'none',

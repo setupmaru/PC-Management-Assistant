@@ -503,8 +503,17 @@ export function registerIpcHandlers(
         refreshToken?: string
         user?: { id: string; email: string; plan: string }
         error?: string
+        code?: string
+        verificationRequired?: boolean
       }
-      if (!res.ok) return { success: false, error: data.error ?? '로그인 실패' }
+      if (!res.ok) {
+        return {
+          success: false,
+          error: data.error ?? '로그인 실패',
+          verificationRequired: data.verificationRequired ?? data.code === 'EMAIL_NOT_VERIFIED',
+          email,
+        }
+      }
 
       inMemoryAccessToken = data.accessToken ?? null
       if (data.refreshToken) saveRefreshToken(data.refreshToken)
@@ -526,12 +535,71 @@ export function registerIpcHandlers(
         refreshToken?: string
         user?: { id: string; email: string; plan: string }
         error?: string
+        verificationRequired?: boolean
+        message?: string
       }
       if (!res.ok) return { success: false, error: data.error ?? '회원가입 실패' }
 
       inMemoryAccessToken = data.accessToken ?? null
       if (data.refreshToken) saveRefreshToken(data.refreshToken)
+      return {
+        success: true,
+        user: data.user,
+        verificationRequired: data.verificationRequired ?? false,
+        email: data.user?.email ?? email,
+        message: data.message,
+      }
+    } catch (err) {
+      return { success: false, error: formatNetworkError(err) }
+    }
+  })
+
+  ipcMain.handle('auth:verifyEmail', async (_event, email: string, code: string) => {
+    try {
+      const res = await apiFetch('/auth/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code }),
+      })
+      const data = await res.json() as {
+        accessToken?: string
+        refreshToken?: string
+        user?: { id: string; email: string; plan: string }
+        error?: string
+      }
+      if (!res.ok || !data.accessToken || !data.refreshToken || !data.user) {
+        return { success: false, error: data.error ?? '이메일 인증 실패' }
+      }
+
+      inMemoryAccessToken = data.accessToken
+      saveRefreshToken(data.refreshToken)
       return { success: true, user: data.user }
+    } catch (err) {
+      return { success: false, error: formatNetworkError(err) }
+    }
+  })
+
+  ipcMain.handle('auth:resendVerification', async (_event, email: string) => {
+    try {
+      const res = await apiFetch('/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const data = await res.json() as {
+        success?: boolean
+        message?: string
+        error?: string
+        retryAfterSeconds?: number
+      }
+      if (!res.ok) {
+        return {
+          success: false,
+          error: data.error ?? '인증번호 재전송 실패',
+          retryAfterSeconds: data.retryAfterSeconds,
+        }
+      }
+      return { success: true, message: data.message }
     } catch (err) {
       return { success: false, error: formatNetworkError(err) }
     }
