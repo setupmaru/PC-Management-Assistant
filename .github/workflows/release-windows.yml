@@ -69,6 +69,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $version = node -p "require('./package.json').version"
           $assets = Get-ChildItem release -File | Where-Object {
             $_.Extension -in '.exe', '.blockmap', '.zip' -or $_.Name -eq 'latest.yml'
           } | ForEach-Object { $_.FullName }
@@ -77,6 +78,12 @@ jobs:
             throw 'No release assets were generated.'
           }
 
-          gh release create $env:GITHUB_REF_NAME @assets `
-            --title "PC Management Assistant $env:GITHUB_REF_NAME" `
-            --generate-notes
+          if (gh release view $env:GITHUB_REF_NAME 2>$null) {
+            gh release edit $env:GITHUB_REF_NAME --title "V$version" --latest
+            gh release upload $env:GITHUB_REF_NAME @assets --clobber
+          } else {
+            gh release create $env:GITHUB_REF_NAME @assets `
+              --title "V$version" `
+              --generate-notes `
+              --latest
+          }
