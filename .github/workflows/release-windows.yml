@@ -53,16 +53,23 @@ jobs:
             -CompressionLevel Optimal
 
       - name: Build Windows installer
-        id: installer
-        continue-on-error: true
         run: npx electron-builder --win --config.win.signAndEditExecutable=false
 
-      - name: Note installer fallback
-        if: steps.installer.outcome == 'failure'
+      - name: Verify Windows packages
         shell: pwsh
         run: |
-          'NSIS installer generation failed; the portable Windows ZIP will be published instead.' |
-            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          $version = node -p "require('./package.json').version"
+          $requiredFiles = @(
+            'release/win-unpacked/PC Management Assistant.exe',
+            "release/PC-Management-Assistant-$version-setup.exe",
+            "release/PC-Management-Assistant-$version-windows-portable.zip"
+          )
+
+          foreach ($file in $requiredFiles) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+              throw "Required Windows package was not generated: $file"
+            }
+          }
 
       - name: Publish GitHub Release
         shell: pwsh
@@ -70,6 +77,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $version = node -p "require('./package.json').version"
+          $installer = "release/PC-Management-Assistant-$version-setup.exe"
+          $portableZip = "release/PC-Management-Assistant-$version-windows-portable.zip"
+
+          if (-not (Test-Path -LiteralPath $installer -PathType Leaf) -or
+              -not (Test-Path -LiteralPath $portableZip -PathType Leaf)) {
+            throw 'The verified installer and portable ZIP are required for release.'
+          }
+
           $assets = Get-ChildItem release -File | Where-Object {
             $_.Extension -in '.exe', '.blockmap', '.zip' -or $_.Name -eq 'latest.yml'
           } | ForEach-Object { $_.FullName }
