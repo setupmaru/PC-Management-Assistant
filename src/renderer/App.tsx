@@ -8,10 +8,13 @@ import SubscriptionBanner from './components/Subscription/SubscriptionBanner'
 import PricingModal from './components/Subscription/PricingModal'
 import LoginScreen from './components/Auth/LoginScreen'
 import RegisterScreen from './components/Auth/RegisterScreen'
+import ForgotPasswordScreen from './components/Auth/ForgotPasswordScreen'
 import UpdateBanner from './components/Update/UpdateBanner'
 
 export default function App() {
   const [verificationEmail, setVerificationEmail] = useState('')
+  const [passwordResetEmail, setPasswordResetEmail] = useState('')
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
   const {
     showSettings, setShowSettings, setApiKeyStatus,
     authStatus, setAuthStatus, setCurrentUser, setSubscriptionStatus,
@@ -75,6 +78,7 @@ export default function App() {
     setSubscriptionStatus(null)
     setAuthStatus('login')
     setShowRegister(false)
+    setShowForgotPassword(false)
     setShowSettings(false)
   }
 
@@ -82,6 +86,7 @@ export default function App() {
     setCurrentUser(user)
     setAuthStatus('authenticated')
     setShowRegister(false)
+    setShowForgotPassword(false)
     setVerificationEmail('')
   }
 
@@ -173,7 +178,15 @@ export default function App() {
       {authStatus !== 'authenticated' && (
         <div style={styles.authOverlay}>
           <div style={styles.authModal} onClick={(e) => e.stopPropagation()}>
-            {showRegister ? (
+            {showForgotPassword ? (
+              <ForgotPasswordScreen
+                initialEmail={passwordResetEmail}
+                onGoLogin={() => {
+                  setPasswordResetEmail('')
+                  setShowForgotPassword(false)
+                }}
+              />
+            ) : showRegister ? (
               <RegisterScreen
                 onSuccess={handleAuthSuccess}
                 onGoLogin={() => {
@@ -188,6 +201,10 @@ export default function App() {
                 onGoRegister={() => {
                   setVerificationEmail('')
                   setShowRegister(true)
+                }}
+                onForgotPassword={(email) => {
+                  setPasswordResetEmail(email)
+                  setShowForgotPassword(true)
                 }}
                 onVerificationRequired={(email) => {
                   setVerificationEmail(email)

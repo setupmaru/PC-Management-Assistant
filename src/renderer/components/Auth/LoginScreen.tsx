@@ -3,6 +3,7 @@ import { KeyboardEvent, useEffect, useRef, useState } from 'react'
 interface Props {
   onSuccess: (user: { id: string; email: string; plan: 'free' | 'plus' | 'pro' }) => void
   onGoRegister: () => void
+  onForgotPassword: (email: string) => void
   onVerificationRequired: (email: string) => void
 }
 
@@ -15,7 +16,7 @@ interface ConnectionInfo {
   error?: string
 }
 
-export default function LoginScreen({ onSuccess, onGoRegister, onVerificationRequired }: Props) {
+export default function LoginScreen({ onSuccess, onGoRegister, onForgotPassword, onVerificationRequired }: Props) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -145,7 +146,17 @@ export default function LoginScreen({ onSuccess, onGoRegister, onVerificationReq
         </div>
 
         <div style={styles.fieldGroup}>
-          <label style={styles.label}>Password</label>
+          <div style={styles.passwordLabelRow}>
+            <label style={styles.label}>Password</label>
+            <button
+              type="button"
+              style={styles.forgotBtn}
+              onClick={() => onForgotPassword(email.trim())}
+              disabled={loading}
+            >
+              비밀번호를 잊으셨나요?
+            </button>
+          </div>
           <input
             type="password"
             style={{ ...styles.input, borderColor: error ? '#ef4444' : '#334155' }}
@@ -306,6 +317,20 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     gap: 4,
+  },
+  passwordLabelRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  forgotBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#60a5fa',
+    fontSize: 11,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    padding: 0,
   },
   label: {
     fontSize: 12,

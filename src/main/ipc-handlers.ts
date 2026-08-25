@@ -628,6 +628,39 @@ export function registerIpcHandlers(
     }
   })
 
+  ipcMain.handle('auth:requestPasswordReset', async (_event, email: string) => {
+    try {
+      const res = await apiFetch('/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const data = await res.json() as { success?: boolean; message?: string; error?: string }
+      if (!res.ok) return { success: false, error: data.error ?? '인증번호 전송 실패' }
+      return { success: true, message: data.message }
+    } catch (err) {
+      return { success: false, error: formatNetworkError(err) }
+    }
+  })
+
+  ipcMain.handle(
+    'auth:resetPassword',
+    async (_event, email: string, code: string, newPassword: string) => {
+      try {
+        const res = await apiFetch('/auth/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, code, newPassword }),
+        })
+        const data = await res.json() as { success?: boolean; message?: string; error?: string }
+        if (!res.ok) return { success: false, error: data.error ?? '비밀번호 재설정 실패' }
+        return { success: true, message: data.message }
+      } catch (err) {
+        return { success: false, error: formatNetworkError(err) }
+      }
+    }
+  )
+
   ipcMain.handle('auth:refreshToken', async () => {
     try {
       const refreshToken = loadRefreshToken()

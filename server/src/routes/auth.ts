@@ -6,7 +6,9 @@ import {
   loginUser,
   refreshAccessToken,
   logoutUser,
+  requestPasswordReset,
   resendEmailVerification,
+  resetPassword,
   verifyEmail,
 } from '../services/auth.service'
 
@@ -43,8 +45,12 @@ function sendAuthServiceError(res: Response, err: AuthServiceError): void {
     res.status(410).json({ error: err.message, code: err.code })
     return
   }
-  if (err.code === 'VERIFICATION_TOO_MANY_ATTEMPTS') {
+  if (err.code === 'VERIFICATION_TOO_MANY_ATTEMPTS' || err.code === 'PASSWORD_RESET_TOO_MANY_ATTEMPTS') {
     res.status(429).json({ error: err.message, code: err.code })
+    return
+  }
+  if (err.code === 'PASSWORD_RESET_CODE_EXPIRED') {
+    res.status(410).json({ error: err.message, code: err.code })
     return
   }
   if (err.code === 'EMAIL_ALREADY_VERIFIED') {
@@ -137,6 +143,53 @@ router.post('/resend-verification', async (req: Request, res: Response) => {
     }
     console.error('[auth] Verification resend failed:', err)
     res.status(500).json({ error: '인증번호 재전송 중 오류가 발생했습니다.' })
+  }
+})
+
+// POST /api/auth/forgot-password
+router.post('/forgot-password', async (req: Request, res: Response) => {
+  const email = normalizeEmail(req.body?.email)
+  if (!emailRe.test(email)) {
+    res.status(400).json({ error: '유효한 이메일 주소를 입력해주세요.' })
+    return
+  }
+
+  void requestPasswordReset(email).catch((err) => {
+    // 계정 존재 여부, 재전송 제한, 메일 장애 여부를 응답으로 구분하지 않는다.
+    console.error('[auth] Password reset request failed:', err instanceof Error ? err.message : err)
+  })
+
+  res.json({
+    success: true,
+    message: '해당 이메일 계정이 존재하면 인증번호를 전송했습니다.',
+  })
+})
+
+// POST /api/auth/reset-password
+router.post('/reset-password', async (req: Request, res: Response) => {
+  const email = normalizeEmail(req.body?.email)
+  const code = String(req.body?.code ?? '').trim()
+  const newPassword = String(req.body?.newPassword ?? '')
+
+  if (!emailRe.test(email) || !/^\d{6}$/.test(code)) {
+    res.status(400).json({ error: '이메일과 6자리 인증번호를 확인해주세요.' })
+    return
+  }
+  if (newPassword.length < 8) {
+    res.status(400).json({ error: '새 비밀번호는 8자 이상이어야 합니다.' })
+    return
+  }
+
+  try {
+    await resetPassword(email, code, newPassword)
+    res.json({ success: true, message: '비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.' })
+  } catch (err: unknown) {
+    if (err instanceof AuthServiceError) {
+      sendAuthServiceError(res, err)
+      return
+    }
+    console.error('[auth] Password reset failed:', err)
+    res.status(500).json({ error: '비밀번호 재설정 중 오류가 발생했습니다.' })
   }
 })
 

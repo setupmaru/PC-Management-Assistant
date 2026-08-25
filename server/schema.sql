@@ -62,6 +62,14 @@ CREATE TABLE IF NOT EXISTS email_verification_codes (
   attempts   INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0)
 );
 
+CREATE TABLE IF NOT EXISTS password_reset_codes (
+  user_id    UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  code_hash  VARCHAR(64) NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  sent_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  attempts   INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0)
+);
+
 CREATE TABLE IF NOT EXISTS chat_usage (
   user_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   date     DATE NOT NULL,
@@ -73,6 +81,8 @@ CREATE TABLE IF NOT EXISTS chat_usage (
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS idx_email_verification_codes_expires_at
   ON email_verification_codes(expires_at);
+CREATE INDEX IF NOT EXISTS idx_password_reset_codes_expires_at
+  ON password_reset_codes(expires_at);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_users_stripe_customer_id ON users(stripe_customer_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_polar_customer_id

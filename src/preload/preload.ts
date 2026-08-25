@@ -145,6 +145,18 @@ const api = {
         error?: string
         retryAfterSeconds?: number
       }>,
+    requestPasswordReset: (email: string) =>
+      ipcRenderer.invoke('auth:requestPasswordReset', email) as Promise<{
+        success: boolean
+        message?: string
+        error?: string
+      }>,
+    resetPassword: (email: string, code: string, newPassword: string) =>
+      ipcRenderer.invoke('auth:resetPassword', email, code, newPassword) as Promise<{
+        success: boolean
+        message?: string
+        error?: string
+      }>,
     refreshToken: () =>
       ipcRenderer.invoke('auth:refreshToken') as Promise<{
         success: boolean

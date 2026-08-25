@@ -16,7 +16,7 @@ import {
   JWT_ACCESS_SECRET,
   JWT_REFRESH_SECRET,
 } from '../config/env'
-import { sendEmailVerificationCode } from './email.service'
+import { sendEmailVerificationCode, sendPasswordResetCode } from './email.service'
 
 const ACCESS_SECRET = JWT_ACCESS_SECRET
 const REFRESH_SECRET = JWT_REFRESH_SECRET
@@ -52,6 +52,10 @@ export type AuthErrorCode =
   | 'VERIFICATION_CODE_EXPIRED'
   | 'VERIFICATION_RATE_LIMIT'
   | 'VERIFICATION_TOO_MANY_ATTEMPTS'
+  | 'INVALID_PASSWORD_RESET_CODE'
+  | 'PASSWORD_RESET_CODE_EXPIRED'
+  | 'PASSWORD_RESET_RATE_LIMIT'
+  | 'PASSWORD_RESET_TOO_MANY_ATTEMPTS'
 
 export class AuthServiceError extends Error {
   constructor(
@@ -88,6 +92,12 @@ export function hashTokenForStorage(token: string): string {
 function hashVerificationCode(userId: string, code: string): string {
   return createHmac('sha256', EMAIL_VERIFICATION_SECRET)
     .update(`${userId}:${code}`)
+    .digest('hex')
+}
+
+function hashPasswordResetCode(userId: string, code: string): string {
+  return createHmac('sha256', EMAIL_VERIFICATION_SECRET)
+    .update(`password-reset:${userId}:${code}`)
     .digest('hex')
 }
 
@@ -166,6 +176,60 @@ async function deliverVerificationCode(email: string, code: string): Promise<voi
     throw new AuthServiceError(
       'EMAIL_DELIVERY_FAILED',
       '인증 이메일을 보내지 못했습니다. 잠시 후 다시 시도해주세요.'
+    )
+  }
+}
+
+async function savePasswordResetCode(
+  db: Queryable,
+  userId: string,
+  enforceCooldown: boolean
+): Promise<{ code: string; codeHash: string }> {
+  if (enforceCooldown) {
+    const current = await db.query<{ sent_at: Date }>(
+      `SELECT sent_at FROM password_reset_codes WHERE user_id = $1`,
+      [userId]
+    )
+    const sentAt = current.rows[0]?.sent_at
+    if (sentAt) {
+      const elapsedSeconds = Math.floor((Date.now() - sentAt.getTime()) / 1000)
+      const retryAfterSeconds = Math.max(0, EMAIL_VERIFICATION_RESEND_SECONDS - elapsedSeconds)
+      if (retryAfterSeconds > 0) {
+        throw new AuthServiceError(
+          'PASSWORD_RESET_RATE_LIMIT',
+          `${retryAfterSeconds}초 후에 인증번호를 다시 요청해주세요.`,
+          retryAfterSeconds
+        )
+      }
+    }
+  }
+
+  const code = generateVerificationCode()
+  const codeHash = hashPasswordResetCode(userId, code)
+  const expiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MINUTES * 60 * 1000)
+
+  await db.query(
+    `INSERT INTO password_reset_codes (user_id, code_hash, expires_at, sent_at, attempts)
+     VALUES ($1, $2, $3, NOW(), 0)
+     ON CONFLICT (user_id) DO UPDATE SET
+       code_hash = EXCLUDED.code_hash,
+       expires_at = EXCLUDED.expires_at,
+       sent_at = NOW(),
+       attempts = 0`,
+    [userId, codeHash, expiresAt]
+  )
+
+  return { code, codeHash }
+}
+
+async function deliverPasswordResetCode(email: string, code: string): Promise<void> {
+  try {
+    await sendPasswordResetCode(email, code, EMAIL_VERIFICATION_TTL_MINUTES)
+  } catch (err) {
+    console.error('[email] Failed to send password reset email:', err instanceof Error ? err.message : err)
+    throw new AuthServiceError(
+      'EMAIL_DELIVERY_FAILED',
+      '비밀번호 재설정 이메일을 보내지 못했습니다. 잠시 후 다시 시도해주세요.'
     )
   }
 }
@@ -325,6 +389,130 @@ export async function resendEmailVerification(email: string): Promise<void> {
       [row.id, codeHash]
     )
     throw err
+  }
+}
+
+// ── 비밀번호 재설정 ──────────────────────────────────
+export async function requestPasswordReset(email: string): Promise<void> {
+  const result = await pool.query<UserRow>(
+    `SELECT id, email, plan, email_verified_at
+       FROM users
+      WHERE email = $1 AND email_verified_at IS NOT NULL`,
+    [email.toLowerCase()]
+  )
+  const row = result.rows[0]
+
+  // 계정 존재 여부와 인증 여부를 외부에 노출하지 않는다.
+  if (!row || row.email === 'admin') return
+
+  const { code, codeHash } = await savePasswordResetCode(pool, row.id, true)
+  try {
+    await deliverPasswordResetCode(row.email, code)
+  } catch (err) {
+    await pool.query(
+      `DELETE FROM password_reset_codes WHERE user_id = $1 AND code_hash = $2`,
+      [row.id, codeHash]
+    )
+    throw err
+  }
+}
+
+export async function resetPassword(
+  email: string,
+  code: string,
+  newPassword: string
+): Promise<void> {
+  const client = await pool.connect()
+  let transactionOpen = false
+
+  try {
+    await client.query('BEGIN')
+    transactionOpen = true
+
+    const userResult = await client.query<UserRow>(
+      `SELECT id, email, plan, email_verified_at
+         FROM users
+        WHERE email = $1 AND email_verified_at IS NOT NULL
+        FOR UPDATE`,
+      [email.toLowerCase()]
+    )
+    const row = userResult.rows[0]
+    if (!row || row.email === 'admin') {
+      throw new AuthServiceError(
+        'INVALID_PASSWORD_RESET_CODE',
+        '이메일 또는 인증번호가 올바르지 않습니다.'
+      )
+    }
+
+    const codeResult = await client.query<{
+      code_hash: string
+      expires_at: Date
+      attempts: number
+    }>(
+      `SELECT code_hash, expires_at, attempts
+         FROM password_reset_codes
+        WHERE user_id = $1
+        FOR UPDATE`,
+      [row.id]
+    )
+    const savedCode = codeResult.rows[0]
+    if (!savedCode) {
+      throw new AuthServiceError(
+        'INVALID_PASSWORD_RESET_CODE',
+        '이메일 또는 인증번호가 올바르지 않습니다.'
+      )
+    }
+
+    if (new Date() > savedCode.expires_at) {
+      await client.query(`DELETE FROM password_reset_codes WHERE user_id = $1`, [row.id])
+      await client.query('COMMIT')
+      transactionOpen = false
+      throw new AuthServiceError(
+        'PASSWORD_RESET_CODE_EXPIRED',
+        '인증번호가 만료되었습니다. 새 인증번호를 요청해주세요.'
+      )
+    }
+
+    const candidateHash = hashPasswordResetCode(row.id, code)
+    if (!constantTimeHexEqual(candidateHash, savedCode.code_hash)) {
+      const nextAttempts = savedCode.attempts + 1
+      if (nextAttempts >= MAX_VERIFICATION_ATTEMPTS) {
+        await client.query(`DELETE FROM password_reset_codes WHERE user_id = $1`, [row.id])
+      } else {
+        await client.query(
+          `UPDATE password_reset_codes SET attempts = $2 WHERE user_id = $1`,
+          [row.id, nextAttempts]
+        )
+      }
+      await client.query('COMMIT')
+      transactionOpen = false
+
+      if (nextAttempts >= MAX_VERIFICATION_ATTEMPTS) {
+        throw new AuthServiceError(
+          'PASSWORD_RESET_TOO_MANY_ATTEMPTS',
+          '인증번호 입력 횟수를 초과했습니다. 새 인증번호를 요청해주세요.'
+        )
+      }
+      throw new AuthServiceError(
+        'INVALID_PASSWORD_RESET_CODE',
+        '이메일 또는 인증번호가 올바르지 않습니다.'
+      )
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST)
+    await client.query(
+      `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
+      [passwordHash, row.id]
+    )
+    await client.query(`DELETE FROM password_reset_codes WHERE user_id = $1`, [row.id])
+    await client.query(`DELETE FROM refresh_tokens WHERE user_id = $1`, [row.id])
+    await client.query('COMMIT')
+    transactionOpen = false
+  } catch (err) {
+    if (transactionOpen) await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
   }
 }
 
