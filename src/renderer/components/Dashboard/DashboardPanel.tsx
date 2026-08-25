@@ -6,6 +6,8 @@ import ProcessTable from './ProcessTable'
 import AlertBanner from './AlertBanner'
 import WindowsUpdateCard from './WindowsUpdateCard'
 import SystemMaintenanceCard from './SystemMaintenanceCard'
+import NetworkHealthCard from './NetworkHealthCard'
+import BootOptimizationCard from './BootOptimizationCard'
 import { useAppStore } from '../../store/appStore'
 
 export default function DashboardPanel() {
@@ -47,6 +49,9 @@ export default function DashboardPanel() {
           <DiskCard />
           <NetworkCard />
         </div>
+
+        <NetworkHealthCard />
+        <BootOptimizationCard />
 
         <div style={styles.section}>
           <div style={styles.sectionHeader}>

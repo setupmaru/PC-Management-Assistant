@@ -4,6 +4,13 @@ import { collectTopProcesses, ProcessInfo } from './process-collector'
 import { EventLogCollector, EventLogResult } from './event-log-collector'
 import { WindowsUpdateCollector, WindowsUpdateResult } from './windows-update-collector'
 import { SystemMaintenanceService, SystemMaintenanceReport } from '../maintenance/system-maintenance'
+import { NetworkMonitorService } from '../diagnostics/network-monitor'
+import { BootOptimizerService } from '../diagnostics/boot-optimizer'
+import {
+  BootOptimizationSnapshot,
+  NetworkHealthSnapshot,
+  NetworkMonitorSettings,
+} from '../../shared/diagnostics'
 
 export interface FullSnapshot {
   metrics: SystemMetrics
@@ -17,6 +24,8 @@ export class DataCollectorService {
   private eventLogCollector = new EventLogCollector()
   private windowsUpdateCollector = new WindowsUpdateCollector()
   private maintenanceService = new SystemMaintenanceService()
+  private networkMonitor = new NetworkMonitorService()
+  private bootOptimizer = new BootOptimizerService()
 
   private metricsTimer: ReturnType<typeof setInterval> | null = null
   private slowTimer: ReturnType<typeof setInterval> | null = null
@@ -30,6 +39,13 @@ export class DataCollectorService {
   async initialize(win: BrowserWindow): Promise<void> {
     this.win = win
     await warmupSystemInfo()
+
+    this.bootOptimizer.initialize((snapshot) => {
+      this.win?.webContents.send('diagnostics:bootUpdate', snapshot)
+    })
+    this.networkMonitor.initialize((snapshot) => {
+      this.win?.webContents.send('diagnostics:networkUpdate', snapshot)
+    }, () => this.bootOptimizer.createMarkdownReport()).catch(() => {})
 
     this.metricsTimer = setInterval(async () => {
       try {
@@ -149,12 +165,65 @@ export class DataCollectorService {
     return this.maintenanceService.getLastReport()
   }
 
+  getNetworkHealth(): NetworkHealthSnapshot | null {
+    return this.networkMonitor.getSnapshot()
+  }
+
+  async measureNetworkNow(): Promise<NetworkHealthSnapshot> {
+    return this.networkMonitor.measureNow()
+  }
+
+  async updateNetworkSettings(settings: Partial<NetworkMonitorSettings>): Promise<NetworkHealthSnapshot> {
+    return this.networkMonitor.updateSettings(settings)
+  }
+
+  clearNetworkHistory(): NetworkHealthSnapshot | null {
+    return this.networkMonitor.clearHistory()
+  }
+
+  createNetworkReport(days: number): string {
+    return this.networkMonitor.createMarkdownReport(days)
+  }
+
+  getBootOptimization(): BootOptimizationSnapshot | null {
+    return this.bootOptimizer.getSnapshot()
+  }
+
+  async refreshBootOptimization(): Promise<BootOptimizationSnapshot> {
+    return this.bootOptimizer.refresh()
+  }
+
+  setRestorePointAutoCreate(enabled: boolean): BootOptimizationSnapshot | null {
+    return this.bootOptimizer.setRestorePointAutoCreate(enabled)
+  }
+
+  async createSystemRestorePoint(): Promise<void> {
+    return this.bootOptimizer.createRestorePoint()
+  }
+
+  async disableStartupItem(itemId: string): Promise<BootOptimizationSnapshot> {
+    return this.bootOptimizer.disableItem(itemId)
+  }
+
+  async restoreStartupChange(changeId: string): Promise<BootOptimizationSnapshot> {
+    return this.bootOptimizer.restoreChange(changeId)
+  }
+
+  async restoreAllStartupChanges(): Promise<BootOptimizationSnapshot> {
+    return this.bootOptimizer.restoreAll()
+  }
+
+  createBootReport(): string {
+    return this.bootOptimizer.createMarkdownReport()
+  }
+
   destroy(): void {
     if (this.metricsTimer) clearInterval(this.metricsTimer)
     if (this.slowTimer) clearInterval(this.slowTimer)
     if (this.eventTimer) clearInterval(this.eventTimer)
     if (this.updateTimer) clearInterval(this.updateTimer)
     if (this.autoUpdateApplyTimer) clearInterval(this.autoUpdateApplyTimer)
+    this.networkMonitor.destroy()
     this.win = null
   }
 }

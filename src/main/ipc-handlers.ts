@@ -1,4 +1,4 @@
-﻿import { ipcMain, BrowserWindow, app } from 'electron'
+﻿import { ipcMain, BrowserWindow, app, dialog } from 'electron'
 import fs from 'fs'
 import { net } from 'electron'
 import os from 'os'
@@ -14,6 +14,7 @@ import {
   loadRefreshToken,
   clearRefreshToken,
 } from './store'
+import { NetworkMonitorSettings } from '../shared/diagnostics'
 
 const LOCALHOST_FALLBACK_API_BASE = 'http://localhost:3400/api'
 const DEV_DEFAULT_API_BASE = LOCALHOST_FALLBACK_API_BASE
@@ -890,6 +891,126 @@ export function registerIpcHandlers(
     return {
       success: true,
       data: collector.getLastMaintenanceReport(),
+    }
+  })
+
+  ipcMain.handle('diagnostics:getNetworkHealth', () => {
+    return { success: true, data: collector.getNetworkHealth() }
+  })
+
+  ipcMain.handle('diagnostics:measureNetworkNow', async () => {
+    try {
+      return { success: true, data: await collector.measureNetworkNow() }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('diagnostics:updateNetworkSettings', async (_event, settings: Partial<NetworkMonitorSettings>) => {
+    try {
+      if (settings.autoWeeklyReport === true) {
+        const res = await authenticatedFetch('/subscription/status')
+        const status = await res.json() as { plan?: string; error?: string }
+        if (!res.ok || status.plan !== 'pro') {
+          return { success: false, error: status.error ?? '자동 주간 리포트는 Pro 플랜에서 사용할 수 있습니다.' }
+        }
+      }
+      return { success: true, data: await collector.updateNetworkSettings(settings) }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('diagnostics:clearNetworkHistory', () => {
+    try {
+      return { success: true, data: collector.clearNetworkHistory() }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('diagnostics:saveNetworkReport', async (_event, days: number) => {
+    try {
+      const stamp = new Date().toISOString().slice(0, 10)
+      const result = await dialog.showSaveDialog(win, {
+        title: '네트워크 리포트 저장',
+        defaultPath: path.join(app.getPath('documents'), `network-report-${stamp}.md`),
+        filters: [{ name: 'Markdown', extensions: ['md'] }],
+      })
+      if (result.canceled || !result.filePath) return { success: false, error: '저장이 취소되었습니다.' }
+      fs.writeFileSync(result.filePath, collector.createNetworkReport(days), 'utf8')
+      return { success: true, message: result.filePath }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('diagnostics:getBootOptimization', () => {
+    return { success: true, data: collector.getBootOptimization() }
+  })
+
+  ipcMain.handle('diagnostics:refreshBootOptimization', async () => {
+    try {
+      return { success: true, data: await collector.refreshBootOptimization() }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('diagnostics:setRestorePointAutoCreate', (_event, enabled: boolean) => {
+    try {
+      return { success: true, data: collector.setRestorePointAutoCreate(enabled) }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('diagnostics:createRestorePoint', async () => {
+    try {
+      await collector.createSystemRestorePoint()
+      return { success: true, message: '시스템 복원 지점을 만들었습니다.' }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('diagnostics:disableStartupItem', async (_event, itemId: string) => {
+    try {
+      return { success: true, data: await collector.disableStartupItem(String(itemId)) }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('diagnostics:restoreStartupChange', async (_event, changeId: string) => {
+    try {
+      return { success: true, data: await collector.restoreStartupChange(String(changeId)) }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('diagnostics:restoreAllStartupChanges', async () => {
+    try {
+      return { success: true, data: await collector.restoreAllStartupChanges() }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('diagnostics:saveBootReport', async () => {
+    try {
+      const stamp = new Date().toISOString().slice(0, 10)
+      const result = await dialog.showSaveDialog(win, {
+        title: '부팅 최적화 리포트 저장',
+        defaultPath: path.join(app.getPath('documents'), `boot-optimization-${stamp}.md`),
+        filters: [{ name: 'Markdown', extensions: ['md'] }],
+      })
+      if (result.canceled || !result.filePath) return { success: false, error: '저장이 취소되었습니다.' }
+      fs.writeFileSync(result.filePath, collector.createBootReport(), 'utf8')
+      return { success: true, message: result.filePath }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
     }
   })
 

@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { ChatSendPayload } from '../shared/chat'
 import { AppUpdateState } from '../shared/updater'
+import {
+  BootOptimizationSnapshot,
+  DiagnosticsResult,
+  NetworkHealthSnapshot,
+  NetworkMonitorSettings,
+} from '../shared/diagnostics'
 
 export interface SystemMetricsUpdate {
   metrics: {
@@ -210,6 +216,45 @@ const api = {
       result?: ConflictResult
       error?: string
     }>,
+
+  diagnostics: {
+    getNetworkHealth: () =>
+      ipcRenderer.invoke('diagnostics:getNetworkHealth') as Promise<DiagnosticsResult<NetworkHealthSnapshot | null>>,
+    measureNetworkNow: () =>
+      ipcRenderer.invoke('diagnostics:measureNetworkNow') as Promise<DiagnosticsResult<NetworkHealthSnapshot>>,
+    updateNetworkSettings: (settings: Partial<NetworkMonitorSettings>) =>
+      ipcRenderer.invoke('diagnostics:updateNetworkSettings', settings) as Promise<DiagnosticsResult<NetworkHealthSnapshot>>,
+    clearNetworkHistory: () =>
+      ipcRenderer.invoke('diagnostics:clearNetworkHistory') as Promise<DiagnosticsResult<NetworkHealthSnapshot | null>>,
+    saveNetworkReport: (days: number) =>
+      ipcRenderer.invoke('diagnostics:saveNetworkReport', days) as Promise<DiagnosticsResult<never>>,
+    getBootOptimization: () =>
+      ipcRenderer.invoke('diagnostics:getBootOptimization') as Promise<DiagnosticsResult<BootOptimizationSnapshot | null>>,
+    refreshBootOptimization: () =>
+      ipcRenderer.invoke('diagnostics:refreshBootOptimization') as Promise<DiagnosticsResult<BootOptimizationSnapshot>>,
+    setRestorePointAutoCreate: (enabled: boolean) =>
+      ipcRenderer.invoke('diagnostics:setRestorePointAutoCreate', enabled) as Promise<DiagnosticsResult<BootOptimizationSnapshot | null>>,
+    createRestorePoint: () =>
+      ipcRenderer.invoke('diagnostics:createRestorePoint') as Promise<DiagnosticsResult<never>>,
+    disableStartupItem: (itemId: string) =>
+      ipcRenderer.invoke('diagnostics:disableStartupItem', itemId) as Promise<DiagnosticsResult<BootOptimizationSnapshot>>,
+    restoreStartupChange: (changeId: string) =>
+      ipcRenderer.invoke('diagnostics:restoreStartupChange', changeId) as Promise<DiagnosticsResult<BootOptimizationSnapshot>>,
+    restoreAllStartupChanges: () =>
+      ipcRenderer.invoke('diagnostics:restoreAllStartupChanges') as Promise<DiagnosticsResult<BootOptimizationSnapshot>>,
+    saveBootReport: () =>
+      ipcRenderer.invoke('diagnostics:saveBootReport') as Promise<DiagnosticsResult<never>>,
+    onNetworkUpdate: (cb: (snapshot: NetworkHealthSnapshot) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, snapshot: NetworkHealthSnapshot) => cb(snapshot)
+      ipcRenderer.on('diagnostics:networkUpdate', handler)
+      return () => ipcRenderer.removeListener('diagnostics:networkUpdate', handler)
+    },
+    onBootUpdate: (cb: (snapshot: BootOptimizationSnapshot) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, snapshot: BootOptimizationSnapshot) => cb(snapshot)
+      ipcRenderer.on('diagnostics:bootUpdate', handler)
+      return () => ipcRenderer.removeListener('diagnostics:bootUpdate', handler)
+    },
+  },
 
   onMetricsUpdate: (cb: (data: SystemMetricsUpdate) => void) => {
     const handler = (_: Electron.IpcRendererEvent, data: SystemMetricsUpdate) => cb(data)
