@@ -1,9 +1,13 @@
+import crypto from 'node:crypto'
 import net from 'node:net'
 import type { Subscription } from '@polar-sh/sdk/models/components/subscription'
 import pool from '../config/db'
 import { makeApiUrl } from '../config/app'
+import { JWT_ACCESS_SECRET } from '../config/env'
 import {
+  checkoutLinkForPlan,
   getPolarClient,
+  isPolarApiConfigured,
   PaidPlan,
   planForProductId,
   productIdForPlan,
@@ -30,8 +34,28 @@ function normalizeCustomerIp(value?: string): string | undefined {
   return ip
 }
 
-function externalUserId(subscription: Subscription): string | null {
+function createCheckoutReference(userId: string, plan: PaidPlan): string {
+  const message = `${userId}:${plan}`
+  const signature = crypto.createHmac('sha256', JWT_ACCESS_SECRET).update(`polar:${message}`).digest('hex')
+  return `${message}:${signature}`
+}
+
+function userIdFromCheckoutReference(value: unknown, expectedPlan: PaidPlan): string | null {
+  if (typeof value !== 'string') return null
+  const [userId, plan, signature, extra] = value.split(':')
+  if (extra !== undefined || plan !== expectedPlan || !USER_ID_PATTERN.test(userId) || !/^[0-9a-f]{64}$/.test(signature)) {
+    return null
+  }
+
+  const expected = createCheckoutReference(userId, expectedPlan).split(':')[2]
+  return crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'))
+    ? userId
+    : null
+}
+
+function externalUserId(subscription: Subscription, plan: PaidPlan): string | null {
   const metadataUserId = subscription.metadata.userId
+  const checkoutReferenceUserId = userIdFromCheckoutReference(subscription.metadata.reference_id, plan)
   const customerUserId = subscription.customer.externalId
   const validMetadataUserId = typeof metadataUserId === 'string' && USER_ID_PATTERN.test(metadataUserId)
     ? metadataUserId
@@ -40,10 +64,12 @@ function externalUserId(subscription: Subscription): string | null {
     ? customerUserId
     : null
 
-  if (validMetadataUserId && validCustomerUserId && validMetadataUserId !== validCustomerUserId) {
+  const candidates = [validMetadataUserId, validCustomerUserId, checkoutReferenceUserId]
+    .filter((value): value is string => value !== null)
+  if (new Set(candidates).size > 1) {
     return null
   }
-  return validMetadataUserId ?? validCustomerUserId
+  return candidates[0] ?? null
 }
 
 function subscriptionIsEntitled(status: string, periodEnd: Date, cancelAtPeriodEnd: boolean): boolean {
@@ -101,6 +127,17 @@ export async function createPolarCheckout(
   plan: PaidPlan,
   customerIp?: string
 ): Promise<string> {
+  if (!isPolarApiConfigured()) {
+    const checkoutLink = checkoutLinkForPlan(plan)
+    if (!checkoutLink) throw new Error('Polar Checkout Link가 설정되지 않았습니다.')
+
+    const url = new URL(checkoutLink)
+    url.searchParams.set('customer_email', email)
+    url.searchParams.set('locale', 'ko')
+    url.searchParams.set('reference_id', createCheckoutReference(userId, plan))
+    return url.toString()
+  }
+
   const checkout = await getPolarClient().checkouts.create({
     products: [productIdForPlan(plan)],
     externalCustomerId: userId,
@@ -129,14 +166,14 @@ export async function createCustomerPortalUrl(userId: string): Promise<string> {
 }
 
 export async function syncPolarSubscription(subscription: Subscription): Promise<void> {
-  const userId = externalUserId(subscription)
-  if (!userId) {
-    throw new Error(`Polar 구독 ${subscription.id}에 유효한 외부 사용자 ID가 없습니다.`)
-  }
-
   const plan = planForProductId(subscription.productId)
   if (!plan) {
     throw new Error(`등록되지 않은 Polar 상품입니다: ${subscription.productId}`)
+  }
+
+  const userId = externalUserId(subscription, plan)
+  if (!userId) {
+    throw new Error(`Polar 구독 ${subscription.id}에 유효한 외부 사용자 ID가 없습니다.`)
   }
 
   const client = await pool.connect()

@@ -2,7 +2,9 @@ import { Polar } from '@polar-sh/sdk'
 import {
   POLAR_ACCESS_TOKEN,
   POLAR_ENVIRONMENT,
+  POLAR_PLUS_CHECKOUT_URL,
   POLAR_PLUS_PRODUCT_ID,
+  POLAR_PRO_CHECKOUT_URL,
   POLAR_PRO_PRODUCT_ID,
   POLAR_WEBHOOK_SECRET,
 } from './env'
@@ -20,10 +22,28 @@ function isProductId(value: string): boolean {
     && value !== '00000000-0000-0000-0000-000000000000'
 }
 
-export function isPolarCheckoutConfigured(): boolean {
+function isCheckoutLink(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:'
+      && url.hostname === 'buy.polar.sh'
+      && /^\/polar_cl_[A-Za-z0-9]+$/.test(url.pathname)
+  } catch {
+    return false
+  }
+}
+
+export function isPolarApiConfigured(): boolean {
   return isConfiguredValue(POLAR_ACCESS_TOKEN)
-    && isProductId(POLAR_PLUS_PRODUCT_ID)
+}
+
+export function isPolarCheckoutConfigured(): boolean {
+  return isProductId(POLAR_PLUS_PRODUCT_ID)
     && isProductId(POLAR_PRO_PRODUCT_ID)
+    && (
+      isPolarApiConfigured()
+      || (isCheckoutLink(POLAR_PLUS_CHECKOUT_URL) && isCheckoutLink(POLAR_PRO_CHECKOUT_URL))
+    )
 }
 
 export function isPolarWebhookConfigured(): boolean {
@@ -31,8 +51,8 @@ export function isPolarWebhookConfigured(): boolean {
 }
 
 export function getPolarClient(): Polar {
-  if (!isPolarCheckoutConfigured()) {
-    throw new Error('Polar 결제 환경 변수가 설정되지 않았습니다.')
+  if (!isPolarApiConfigured()) {
+    throw new Error('POLAR_ACCESS_TOKEN이 설정되지 않았습니다.')
   }
 
   client ??= new Polar({
@@ -51,6 +71,11 @@ export function getPolarWebhookSecret(): string {
 
 export function productIdForPlan(plan: PaidPlan): string {
   return plan === 'plus' ? POLAR_PLUS_PRODUCT_ID : POLAR_PRO_PRODUCT_ID
+}
+
+export function checkoutLinkForPlan(plan: PaidPlan): string | null {
+  const value = plan === 'plus' ? POLAR_PLUS_CHECKOUT_URL : POLAR_PRO_CHECKOUT_URL
+  return isCheckoutLink(value) ? value : null
 }
 
 export function planForProductId(productId: string): PaidPlan | null {

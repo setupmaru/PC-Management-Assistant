@@ -8,7 +8,7 @@
 - Fill in `DATABASE_URL`, `JWT_ACCESS_SECRET`, and `JWT_REFRESH_SECRET`.
 - Complete the Stripe Connect payout setup in the Polar dashboard.
 - Create monthly Plus (KRW 4,900) and Pro (KRW 15,000) products in Polar, then set
-  `POLAR_ACCESS_TOKEN`, `POLAR_PLUS_PRODUCT_ID`, and `POLAR_PRO_PRODUCT_ID`.
+  both product IDs. Configure either an API access token or both Checkout Link URLs.
 - Register `http://api.setupmaru.com:3400/api/polar/webhook` as a Polar webhook endpoint,
   subscribe to the subscription events listed below, and set `POLAR_WEBHOOK_SECRET`.
 - Enable 2-Step Verification on the Gmail sender account, create a Google App Password, and set
@@ -51,14 +51,19 @@ Minimal option:
 
 ## Polar payments
 
-Required production variables:
+Production variables:
 
 ```text
 POLAR_ENVIRONMENT=production
+# Required for authenticated Checkout Sessions, in-app cancellation, and customer portal links
 POLAR_ACCESS_TOKEN=polar_oat_...
+# Required before checkout is enabled
 POLAR_WEBHOOK_SECRET=polar_whs_...
 POLAR_PLUS_PRODUCT_ID=<monthly-plus-product-id>
 POLAR_PRO_PRODUCT_ID=<monthly-pro-product-id>
+# Checkout Link fallback when POLAR_ACCESS_TOKEN is not available
+POLAR_PLUS_CHECKOUT_URL=https://buy.polar.sh/polar_cl_...
+POLAR_PRO_CHECKOUT_URL=https://buy.polar.sh/polar_cl_...
 ```
 
 Webhook URL:
