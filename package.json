@@ -1,6 +1,6 @@
 {
   "name": "pc-management-assistant",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "PC management assistant - Windows diagnostics and OpenAI chat",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -41,5 +41,9 @@
     "vite": "^6.0.7",
     "vite-plugin-electron": "^0.28.8",
     "vite-plugin-electron-renderer": "^0.14.6"
+  },
+  "allowScripts": {
+    "electron@33.4.11": true,
+    "esbuild@0.25.12": true
   }
 }

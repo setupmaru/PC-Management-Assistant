@@ -79,6 +79,7 @@ jobs:
           $version = node -p "require('./package.json').version"
           $installer = "release/PC-Management-Assistant-$version-setup.exe"
           $portableZip = "release/PC-Management-Assistant-$version-windows-portable.zip"
+          $notesFile = "release-notes/$env:GITHUB_REF_NAME.md"
 
           if (-not (Test-Path -LiteralPath $installer -PathType Leaf) -or
               -not (Test-Path -LiteralPath $portableZip -PathType Leaf)) {
@@ -101,11 +102,19 @@ jobs:
             }
           }
 
-          & gh release create $env:GITHUB_REF_NAME @assets `
-            --verify-tag `
-            --title "V$version" `
-            --generate-notes `
-            --latest
+          if (Test-Path -LiteralPath $notesFile -PathType Leaf) {
+            & gh release create $env:GITHUB_REF_NAME @assets `
+              --verify-tag `
+              --title "V$version" `
+              --notes-file $notesFile `
+              --latest
+          } else {
+            & gh release create $env:GITHUB_REF_NAME @assets `
+              --verify-tag `
+              --title "V$version" `
+              --generate-notes `
+              --latest
+          }
           if ($LASTEXITCODE -ne 0) {
             throw 'Failed to create the GitHub Release.'
           }
