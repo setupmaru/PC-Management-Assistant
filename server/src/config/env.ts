@@ -3,10 +3,15 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 type NodeEnv = 'development' | 'production' | 'test'
+type PolarEnvironment = 'sandbox' | 'production'
 
 function normalizeNodeEnv(value: string | undefined): NodeEnv {
   if (value === 'production' || value === 'test') return value
   return 'development'
+}
+
+function normalizePolarEnvironment(value: string | undefined): PolarEnvironment {
+  return value?.trim().toLowerCase() === 'sandbox' ? 'sandbox' : 'production'
 }
 
 function readOptional(name: string): string | undefined {
@@ -100,12 +105,11 @@ if (IS_PRODUCTION) {
   }
 }
 
-const TOSS_CLIENT_KEY = readRequired('TOSS_CLIENT_KEY')
-const TOSS_SECRET_KEY = readRequired('TOSS_SECRET_KEY')
-const TOSS_WEBHOOK_SECRET = readOptional('TOSS_WEBHOOK_SECRET') ?? ''
-const TOSS_PLUS_PRICE = readInteger('TOSS_PLUS_PRICE', 4900)
-const TOSS_PRO_PRICE = readInteger('TOSS_PRO_PRICE', 15000)
-const STRIPE_SECRET_KEY = readOptional('STRIPE_SECRET_KEY') ?? ''
+const POLAR_ACCESS_TOKEN = readOptional('POLAR_ACCESS_TOKEN') ?? ''
+const POLAR_WEBHOOK_SECRET = readOptional('POLAR_WEBHOOK_SECRET') ?? ''
+const POLAR_PLUS_PRODUCT_ID = readOptional('POLAR_PLUS_PRODUCT_ID') ?? ''
+const POLAR_PRO_PRODUCT_ID = readOptional('POLAR_PRO_PRODUCT_ID') ?? ''
+const POLAR_ENVIRONMENT = normalizePolarEnvironment(process.env.POLAR_ENVIRONMENT)
 
 const GMAIL_USER = readOptional('GMAIL_USER') ?? ''
 const GMAIL_APP_PASSWORD = readOptional('GMAIL_APP_PASSWORD') ?? ''
@@ -137,13 +141,12 @@ export {
   JWT_ACCESS_SECRET,
   JWT_REFRESH_SECRET,
   NODE_ENV,
+  POLAR_ACCESS_TOKEN,
+  POLAR_ENVIRONMENT,
+  POLAR_PLUS_PRODUCT_ID,
+  POLAR_PRO_PRODUCT_ID,
+  POLAR_WEBHOOK_SECRET,
   PORT,
   PUBLIC_BASE_URL,
   PUBLIC_ORIGIN,
-  STRIPE_SECRET_KEY,
-  TOSS_CLIENT_KEY,
-  TOSS_PLUS_PRICE,
-  TOSS_PRO_PRICE,
-  TOSS_SECRET_KEY,
-  TOSS_WEBHOOK_SECRET,
 }

@@ -12,6 +12,8 @@ export default function SubscriptionSection({ onLogout }: Props) {
 
   const plan = currentUser?.plan ?? 'free'
   const isPro = plan === 'pro'
+  const isPlus = plan === 'plus'
+  const isPaid = isPlus || isPro
 
   const refreshStatus = async () => {
     const res = await window.api.subscription.getStatus()
@@ -68,13 +70,16 @@ export default function SubscriptionSection({ onLogout }: Props) {
           </svg>
           <span style={styles.email}>{currentUser?.email ?? '-'}</span>
         </div>
-        <div style={{ ...styles.planBadge, ...(isPro ? styles.planBadgePro : styles.planBadgeFree) }}>
-          {isPro ? 'PRO' : 'FREE'}
+        <div style={{
+          ...styles.planBadge,
+          ...(isPro ? styles.planBadgePro : isPlus ? styles.planBadgePlus : styles.planBadgeFree),
+        }}>
+          {isPro ? 'PRO' : isPlus ? 'PLUS' : 'FREE'}
         </div>
       </div>
 
-      {/* Pro 구독 상세 */}
-      {isPro && subscriptionStatus && (
+      {/* 유료 구독 상세 */}
+      {isPaid && subscriptionStatus && (
         <div style={styles.subDetails}>
           {subscriptionStatus.periodEnd && (
             <div style={styles.subRow}>
@@ -104,23 +109,27 @@ export default function SubscriptionSection({ onLogout }: Props) {
 
       {/* 액션 버튼 */}
       <div style={styles.btnRow}>
-        {!isPro ? (
+        {!isPaid && (
           <button
             style={styles.upgradeBtn}
             onClick={() => setShowPricingModal(true)}
           >
-            토스페이먼츠로 Pro 업그레이드
+            Polar로 플랜 업그레이드
           </button>
-        ) : (
-          !subscriptionStatus?.cancelAtPeriodEnd && (
-            <button
-              style={{ ...styles.cancelBtn, opacity: loading === 'cancel' ? 0.6 : 1 }}
-              onClick={handleCancel}
-              disabled={loading === 'cancel'}
-            >
-              {loading === 'cancel' ? '처리 중...' : '구독 취소'}
-            </button>
-          )
+        )}
+        {isPlus && (
+          <button style={styles.upgradeBtn} onClick={() => setShowPricingModal(true)}>
+            Polar에서 Pro로 변경
+          </button>
+        )}
+        {isPaid && !subscriptionStatus?.cancelAtPeriodEnd && (
+          <button
+            style={{ ...styles.cancelBtn, opacity: loading === 'cancel' ? 0.6 : 1 }}
+            onClick={handleCancel}
+            disabled={loading === 'cancel'}
+          >
+            {loading === 'cancel' ? '처리 중...' : '구독 취소'}
+          </button>
         )}
         <button
           style={{ ...styles.logoutBtn, opacity: loading === 'logout' ? 0.6 : 1 }}
@@ -160,6 +169,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   planBadgePro: {
     color: '#fbbf24', background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)',
+  },
+  planBadgePlus: {
+    color: '#38bdf8', background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.3)',
   },
   subDetails: {
     background: 'rgba(251,191,36,0.04)', border: '1px solid rgba(251,191,36,0.15)',

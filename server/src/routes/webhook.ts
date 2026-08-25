@@ -1,21 +1,57 @@
 import { Request, Response, Router } from 'express'
-import { TOSS_WEBHOOK_SECRET } from '../config/env'
+import { validateEvent, WebhookVerificationError } from '@polar-sh/sdk/webhooks'
+import { getPolarWebhookSecret, isPolarWebhookConfigured } from '../config/polar'
+import { syncPolarSubscription } from '../services/subscription.service'
 
 const router = Router()
 
-router.post('/', (req: Request, res: Response) => {
-  if (TOSS_WEBHOOK_SECRET) {
-    const { secret } = req.body as { secret?: string }
-    if (secret !== TOSS_WEBHOOK_SECRET) {
-      res.status(401).json({ error: 'Invalid webhook secret.' })
-      return
-    }
+function stringHeaders(req: Request): Record<string, string> {
+  const headers: Record<string, string> = {}
+  for (const [name, value] of Object.entries(req.headers)) {
+    if (typeof value === 'string') headers[name] = value
+    else if (Array.isArray(value)) headers[name] = value.join(',')
+  }
+  return headers
+}
+
+router.post('/', async (req: Request, res: Response) => {
+  if (!isPolarWebhookConfigured()) {
+    res.status(503).json({ error: 'Polar webhook is not configured.' })
+    return
+  }
+  if (!Buffer.isBuffer(req.body)) {
+    res.status(400).json({ error: 'Expected a raw webhook payload.' })
+    return
   }
 
-  const { status, orderId } = req.body as { status?: string; orderId?: string }
-  console.log(`[webhook] TossPayments: status=${status}, orderId=${orderId}`)
+  try {
+    const event = validateEvent(req.body, stringHeaders(req), getPolarWebhookSecret())
 
-  res.json({ received: true })
+    switch (event.type) {
+      case 'subscription.created':
+      case 'subscription.updated':
+      case 'subscription.active':
+      case 'subscription.canceled':
+      case 'subscription.uncanceled':
+      case 'subscription.revoked':
+      case 'subscription.past_due':
+        await syncPolarSubscription(event.data)
+        console.log(`[webhook] Polar ${event.type}: ${event.data.id}`)
+        break
+      default:
+        break
+    }
+
+    res.status(202).json({ received: true })
+  } catch (error) {
+    if (error instanceof WebhookVerificationError) {
+      res.status(403).json({ error: 'Invalid Polar webhook signature.' })
+      return
+    }
+
+    console.error('[webhook] Failed to process Polar event:', error)
+    res.status(500).json({ error: 'Failed to process Polar webhook.' })
+  }
 })
 
 export default router

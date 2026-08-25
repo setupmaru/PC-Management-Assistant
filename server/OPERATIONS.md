@@ -5,7 +5,12 @@
 - Set `NODE_ENV=production`.
 - Set `PUBLIC_BASE_URL=http://api.setupmaru.com:3400`.
 - Set `ALLOWED_ORIGINS=http://api.setupmaru.com:3400`.
-- Fill in `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `TOSS_CLIENT_KEY`, and `TOSS_SECRET_KEY`.
+- Fill in `DATABASE_URL`, `JWT_ACCESS_SECRET`, and `JWT_REFRESH_SECRET`.
+- Complete the Stripe Connect payout setup in the Polar dashboard.
+- Create monthly Plus (KRW 4,900) and Pro (KRW 15,000) products in Polar, then set
+  `POLAR_ACCESS_TOKEN`, `POLAR_PLUS_PRODUCT_ID`, and `POLAR_PRO_PRODUCT_ID`.
+- Register `http://api.setupmaru.com:3400/api/polar/webhook` as a Polar webhook endpoint,
+  subscribe to the subscription events listed below, and set `POLAR_WEBHOOK_SECRET`.
 - Enable 2-Step Verification on the Gmail sender account, create a Google App Password, and set
   `GMAIL_USER`, `GMAIL_APP_PASSWORD`, and `EMAIL_FROM`. Do not use the normal Gmail password.
 
@@ -39,9 +44,37 @@ Minimal option:
 ## Deployment checklist
 1. Update application files on the server.
 2. Review `server/.env`.
-3. Run `npm run build` inside `server`.
-4. Restart the production process.
-5. Verify `/health` and `/api/health`.
+3. Run `psql "$DATABASE_URL" -f schema.sql` inside `server`.
+4. Run `npm ci && npm run build` inside `server`.
+5. Restart the production process.
+6. Verify `/health` and `/api/health`.
+
+## Polar payments
+
+Required production variables:
+
+```text
+POLAR_ENVIRONMENT=production
+POLAR_ACCESS_TOKEN=polar_oat_...
+POLAR_WEBHOOK_SECRET=polar_whs_...
+POLAR_PLUS_PRODUCT_ID=<monthly-plus-product-id>
+POLAR_PRO_PRODUCT_ID=<monthly-pro-product-id>
+```
+
+Webhook URL:
+
+```text
+http://api.setupmaru.com:3400/api/polar/webhook
+```
+
+Subscribe to `subscription.created`, `subscription.updated`, `subscription.active`,
+`subscription.canceled`, `subscription.uncanceled`, `subscription.revoked`, and
+`subscription.past_due`. The API refuses to open a checkout until both the checkout
+credentials and webhook secret are configured, so a successful charge cannot silently
+skip plan provisioning.
+
+In Polar **Settings → Billing → Customer portal**, enable subscription plan changes so
+Plus customers can switch to Pro from the in-app Polar portal.
 
 ## Email verification checks
 

@@ -1,75 +1,88 @@
-import { Router, Request, Response } from 'express'
+import { Request, Response, Router } from 'express'
 import { requireAuth } from '../middleware/auth'
+import { isPolarCheckoutConfigured, isPolarWebhookConfigured, PaidPlan } from '../config/polar'
 import {
-  getSubscriptionStatus,
-  renewWithBillingKey,
   cancelSubscription,
   checkAndUseChatLimit,
+  createCustomerPortalUrl,
+  createPolarCheckout,
+  getSubscriptionStatus,
 } from '../services/subscription.service'
-import { generateBillingToken } from './billing'
-import { isConfigured } from '../config/toss'
-import { makeApiUrl } from '../config/app'
 
 const router = Router()
 
-// GET /api/subscription/status
 router.get('/status', requireAuth, async (req: Request, res: Response) => {
   try {
-    const status = await getSubscriptionStatus(req.user!.id)
-    res.json(status)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    res.status(500).json({ error: msg })
+    res.json(await getSubscriptionStatus(req.user!.id))
+  } catch (error) {
+    console.error('[subscription] Failed to load status:', error)
+    res.status(500).json({ error: '구독 상태를 불러오지 못했습니다.' })
   }
 })
 
-// POST /api/subscription/checkout
-// - 빌링키 없음: 카드 등록 페이지 URL 반환
-// - 빌링키 있음: 즉시 갱신 결제
 router.post('/checkout', requireAuth, async (req: Request, res: Response) => {
-  if (!isConfigured()) {
+  if (!isPolarCheckoutConfigured() || !isPolarWebhookConfigured()) {
     res.status(503).json({
-      error:
-        '토스페이먼츠 키가 설정되지 않았습니다. server/.env에 TOSS_CLIENT_KEY와 TOSS_SECRET_KEY를 입력해주세요.',
+      error: 'Polar 결제가 아직 설정되지 않았습니다. 관리자에게 문의해주세요.',
     })
     return
   }
 
-  const plan: 'plus' | 'pro' = req.body?.plan === 'plus' ? 'plus' : 'pro'
+  const plan: PaidPlan = req.body?.plan === 'plus' ? 'plus' : 'pro'
 
   try {
     const status = await getSubscriptionStatus(req.user!.id)
-
-    if (status.hasBillingKey) {
-      // 빌링키 있으면 즉시 갱신
-      await renewWithBillingKey(req.user!.id, req.user!.email, plan)
-      res.json({ renewed: true })
+    if (status.plan !== 'free' && status.status) {
+      const url = await createCustomerPortalUrl(req.user!.id)
+      res.json({ url, portal: true })
       return
     }
 
-    // 빌링키 없으면 카드 등록 페이지 URL 반환
-    const token = generateBillingToken(req.user!.id, plan)
-    const url = makeApiUrl(`/api/billing/page?token=${encodeURIComponent(token)}`)
+    const url = await createPolarCheckout(
+      req.user!.id,
+      req.user!.email,
+      plan,
+      req.ip
+    )
     res.json({ url })
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    res.status(500).json({ error: msg })
+  } catch (error) {
+    console.error('[subscription] Failed to create Polar checkout:', error)
+    res.status(502).json({ error: '결제창을 열지 못했습니다. 잠시 후 다시 시도해주세요.' })
   }
 })
 
-// POST /api/subscription/cancel
+router.post('/portal', requireAuth, async (req: Request, res: Response) => {
+  if (!isPolarCheckoutConfigured()) {
+    res.status(503).json({ error: 'Polar 결제가 아직 설정되지 않았습니다.' })
+    return
+  }
+
+  try {
+    res.json({ url: await createCustomerPortalUrl(req.user!.id) })
+  } catch (error) {
+    console.error('[subscription] Failed to create Polar customer session:', error)
+    res.status(502).json({ error: '구독 관리 페이지를 열지 못했습니다.' })
+  }
+})
+
 router.post('/cancel', requireAuth, async (req: Request, res: Response) => {
+  if (!isPolarCheckoutConfigured()) {
+    res.status(503).json({ error: 'Polar 결제가 아직 설정되지 않았습니다.' })
+    return
+  }
+
   try {
     await cancelSubscription(req.user!.id)
     res.json({ success: true })
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    res.status(500).json({ error: msg })
+  } catch (error) {
+    console.error('[subscription] Failed to cancel Polar subscription:', error)
+    const message = error instanceof Error && error.message === '취소할 활성 구독이 없습니다.'
+      ? error.message
+      : '구독 취소에 실패했습니다.'
+    res.status(message === '취소할 활성 구독이 없습니다.' ? 409 : 502).json({ error: message })
   }
 })
 
-// POST /api/subscription/chat-use
-// Plus 일일 채팅 한도 확인 및 소비 (Pro는 무제한, Free는 거부)
 router.post('/chat-use', requireAuth, async (req: Request, res: Response) => {
   try {
     const status = await getSubscriptionStatus(req.user!.id)
@@ -84,12 +97,10 @@ router.post('/chat-use', requireAuth, async (req: Request, res: Response) => {
       return
     }
 
-    // Plus: 일일 한도 확인
-    const result = await checkAndUseChatLimit(req.user!.id)
-    res.json(result)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    res.status(500).json({ error: msg })
+    res.json(await checkAndUseChatLimit(req.user!.id))
+  } catch (error) {
+    console.error('[subscription] Failed to consume chat allowance:', error)
+    res.status(500).json({ error: '채팅 사용량을 확인하지 못했습니다.' })
   }
 })
 

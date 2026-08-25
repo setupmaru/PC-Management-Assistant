@@ -28,12 +28,12 @@ app.use(
     optionsSuccessStatus: 204,
   })
 )
+app.use('/api/polar/webhook', express.raw({ type: 'application/json', limit: '256kb' }), webhookRouter)
 app.use(express.json({ limit: '1mb' }))
 
 app.use('/api/auth', authRouter)
 app.use('/api/subscription', subscriptionRouter)
 app.use('/api/billing', billingRouter)
-app.use('/api/toss/webhook', webhookRouter)
 app.use('/api/windows-update', windowsUpdateRouter)
 
 async function handleHealthCheck(_req: express.Request, res: express.Response): Promise<void> {
