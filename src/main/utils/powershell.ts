@@ -8,7 +8,12 @@ const execFileAsync = promisify(execFile)
  * 한글 경로 등 특수문자 포함 환경에서 안전하게 실행
  */
 export async function runPowerShell(script: string, timeoutMs = 15000): Promise<string> {
-  const encoded = Buffer.from(script, 'utf16le').toString('base64')
+  const utf8Script = `
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [Console]::OutputEncoding
+${script}
+`
+  const encoded = Buffer.from(utf8Script, 'utf16le').toString('base64')
 
   const { stdout, stderr } = await execFileAsync(
     'powershell.exe',

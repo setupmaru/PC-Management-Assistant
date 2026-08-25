@@ -127,7 +127,9 @@ export class NetworkMonitorService {
       const rawStages = await this.runMeasurement()
       const stages = rawStages.map((stage) => ({
         key: stage.Key,
-        label: stage.Label || stageLabel(stage.Key),
+        // PowerShell 응답의 표시 문자열에 의존하지 않아 시스템 코드 페이지와
+        // 관계없이 대시보드 구간명이 항상 올바른 한글로 표시되게 한다.
+        label: stageLabel(stage.Key),
         target: stage.Target || null,
         successes: Number(stage.Successes) || 0,
         attempts: Number(stage.Attempts) || 0,
