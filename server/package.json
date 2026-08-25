@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "dev": "ts-node src/index.ts",
-    "build": "tsc",
+    "build": "npm run clean && tsc",
     "start": "node dist/index.js",
     "start:prod": "npm run build && node dist/index.js"
   },
