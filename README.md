@@ -76,16 +76,6 @@ npm run dist:win
 npm run dist:mac
 ```
 
-## 서버 개발
-
-인증, 이메일 인증, 비밀번호 재설정 및 구독 기능은 `server/`의 API 서버에서 제공합니다. 환경 변수 항목은 [`server/.env.example`](server/.env.example)을 참고하세요.
-
-```bash
-cd server
-npm ci
-npm run dev
-```
-
 ## 릴리스
 
 `v*` 태그를 푸시하면 GitHub Actions가 다음 파일을 빌드·검증한 뒤 하나의 Latest 릴리스로 게시합니다.
