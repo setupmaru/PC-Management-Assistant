@@ -1,0 +1,246 @@
+name: Release Desktop Apps
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Verify tag matches package version
+        shell: pwsh
+        run: |
+          $packageVersion = node -p "require('./package.json').version"
+          if ($env:GITHUB_REF_NAME -ne "v$packageVersion") {
+            throw "Tag $env:GITHUB_REF_NAME does not match package version v$packageVersion"
+          }
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Build Windows portable app
+        run: npx electron-builder --win --dir --config.win.signAndEditExecutable=false
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          Compress-Archive `
+            -Path 'release/win-unpacked/*' `
+            -DestinationPath "release/PC-Management-Assistant-$version-windows-portable.zip" `
+            -CompressionLevel Optimal
+
+      - name: Build Windows installer
+        run: npx electron-builder --win --config.win.signAndEditExecutable=false --publish never
+
+      - name: Verify Windows packages
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $requiredFiles = @(
+            'release/win-unpacked/PC Management Assistant.exe',
+            "release/PC-Management-Assistant-$version-setup.exe",
+            "release/PC-Management-Assistant-$version-setup.exe.blockmap",
+            "release/PC-Management-Assistant-$version-windows-portable.zip",
+            'release/latest.yml'
+          )
+
+          foreach ($file in $requiredFiles) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+              throw "Required Windows package was not generated: $file"
+            }
+          }
+
+      - name: Upload Windows release files
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-release
+          path: |
+            release/*-setup.exe
+            release/*-setup.exe.blockmap
+            release/*-windows-portable.zip
+            release/latest.yml
+          if-no-files-found: error
+
+  build-macos:
+    name: Build macOS (Intel + Apple Silicon)
+    runs-on: macos-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Verify tag matches package version
+        shell: bash
+        run: |
+          package_version=$(node -p "require('./package.json').version")
+          if [[ "$GITHUB_REF_NAME" != "v$package_version" ]]; then
+            echo "Tag $GITHUB_REF_NAME does not match package version v$package_version" >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Build macOS packages
+        run: npx electron-builder --mac --x64 --arm64 --publish never
+
+      - name: Verify macOS packages and architectures
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          x64_dmg="release/PC-Management-Assistant-$version-mac-x64.dmg"
+          arm64_dmg="release/PC-Management-Assistant-$version-mac-arm64.dmg"
+          x64_zip="release/PC-Management-Assistant-$version-mac-x64.zip"
+          arm64_zip="release/PC-Management-Assistant-$version-mac-arm64.zip"
+
+          for file in "$x64_dmg" "$arm64_dmg" "$x64_zip" "$arm64_zip" release/latest-mac.yml; do
+            test -f "$file" || { echo "Required macOS package was not generated: $file" >&2; exit 1; }
+          done
+
+          hdiutil verify "$x64_dmg"
+          hdiutil verify "$arm64_dmg"
+          unzip -tq "$x64_zip"
+          unzip -tq "$arm64_zip"
+
+          unzip -p "$x64_zip" 'PC Management Assistant.app/Contents/MacOS/PC Management Assistant' > "$RUNNER_TEMP/pcma-x64"
+          unzip -p "$arm64_zip" 'PC Management Assistant.app/Contents/MacOS/PC Management Assistant' > "$RUNNER_TEMP/pcma-arm64"
+          file "$RUNNER_TEMP/pcma-x64" | grep -q 'x86_64'
+          file "$RUNNER_TEMP/pcma-arm64" | grep -q 'arm64'
+          grep -q "$(basename "$x64_zip")" release/latest-mac.yml
+          grep -q "$(basename "$arm64_zip")" release/latest-mac.yml
+
+      - name: Upload macOS release files
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-release
+          path: |
+            release/*-mac-x64.dmg
+            release/*-mac-arm64.dmg
+            release/*-mac-x64.zip
+            release/*-mac-arm64.zip
+            release/latest-mac.yml
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs:
+      - build-windows
+      - build-macos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Download verified release files
+        uses: actions/download-artifact@v7
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify all release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(jq -r .version package.json)
+          required_files=(
+            "PC-Management-Assistant-$version-setup.exe"
+            "PC-Management-Assistant-$version-setup.exe.blockmap"
+            "PC-Management-Assistant-$version-windows-portable.zip"
+            "PC-Management-Assistant-$version-mac-x64.dmg"
+            "PC-Management-Assistant-$version-mac-arm64.dmg"
+            "PC-Management-Assistant-$version-mac-x64.zip"
+            "PC-Management-Assistant-$version-mac-arm64.zip"
+            "latest.yml"
+            "latest-mac.yml"
+          )
+
+          for file in "${required_files[@]}"; do
+            test -s "release-assets/$file" || { echo "Release file is missing or empty: $file" >&2; exit 1; }
+          done
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(jq -r .version package.json)
+          notes_file="release-notes/$GITHUB_REF_NAME.md"
+          test -f "$notes_file"
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release delete "$GITHUB_REF_NAME" --yes
+          fi
+
+          mapfile -d '' assets < <(find release-assets -maxdepth 1 -type f -print0 | sort -z)
+          test "${#assets[@]}" -gt 0
+          gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
+            --verify-tag \
+            --title "V$version" \
+            --notes-file "$notes_file" \
+            --latest
+
+      - name: Verify published GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(jq -r .version package.json)
+          release_json=$(gh release view "$GITHUB_REF_NAME" --json tagName,name,assets)
+          latest_tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          required_assets=(
+            "PC-Management-Assistant-$version-setup.exe"
+            "PC-Management-Assistant-$version-windows-portable.zip"
+            "PC-Management-Assistant-$version-mac-x64.dmg"
+            "PC-Management-Assistant-$version-mac-arm64.dmg"
+            "PC-Management-Assistant-$version-mac-x64.zip"
+            "PC-Management-Assistant-$version-mac-arm64.zip"
+            "latest.yml"
+            "latest-mac.yml"
+          )
+
+          test "$(jq -r .tagName <<< "$release_json")" = "$GITHUB_REF_NAME"
+          test "$(jq -r .name <<< "$release_json")" = "V$version"
+          test "$latest_tag" = "$GITHUB_REF_NAME"
+
+          for asset in "${required_assets[@]}"; do
+            jq -e --arg asset "$asset" '.assets | any(.name == $asset)' <<< "$release_json" >/dev/null
+          done

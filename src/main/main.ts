@@ -30,6 +30,7 @@ app.whenReady().then(() => { warmupSystemInfo().catch(() => {}) })
 
 function createWindow(): BrowserWindow {
   const savedBounds = loadWindowBounds()
+  const isMac = process.platform === 'darwin'
 
   const win = new BrowserWindow({
     width: savedBounds?.width ?? 1280,
@@ -38,7 +39,10 @@ function createWindow(): BrowserWindow {
     y: savedBounds?.y,
     minWidth: 900,
     minHeight: 600,
-    frame: false, // 而ㅼ뒪? ??댄?諛?    backgroundColor: '#0f172a',
+    frame: isMac,
+    titleBarStyle: isMac ? 'hiddenInset' : undefined,
+    trafficLightPosition: isMac ? { x: 14, y: 13 } : undefined,
+    backgroundColor: '#0f172a',
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -150,4 +154,3 @@ app.on('web-contents-created', (_event, contents) => {
     shell.openExternal(url).catch(() => {})
   })
 })
-

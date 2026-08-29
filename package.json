@@ -1,7 +1,7 @@
 {
   "name": "pc-management-assistant",
-  "version": "1.0.13",
-  "description": "PC management assistant - Windows diagnostics and OpenAI chat",
+  "version": "1.0.14",
+  "description": "PC management assistant - system diagnostics and AI chat",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac --x64 --arm64",
     "server:dev": "cd server && npx ts-node src/index.ts"
   },
   "keywords": [

@@ -12,6 +12,14 @@ export interface MetricsState {
     model?: string
     temperature?: number
   }
+  gpu: {
+    usage: number | null
+    model: string
+    vendor?: string
+    memoryTotalMb?: number
+    memoryUsedMb?: number
+    temperature?: number
+  } | null
   memory: { total: number; used: number; free: number; usagePercent: number }
   disks: { mount: string; fs: string; size: number; used: number; usagePercent: number }[]
   network: { iface: string; rxSec: number; txSec: number }[]
@@ -131,6 +139,7 @@ export const useAppStore = create<AppState>((set) => ({
   // 메트릭
   metrics: {
     cpu: { usage: 0, cores: 0, performanceCores: 0, efficiencyCores: 0, speed: 0, model: '' },
+    gpu: null,
     memory: { total: 0, used: 0, free: 0, usagePercent: 0 },
     disks: [],
     network: [],

@@ -35,6 +35,22 @@ win:
   sign: null
   forceCodeSigning: false
 
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  icon: resources/icon.png
+  category: public.app-category.utilities
+  artifactName: "PC-Management-Assistant-${version}-mac-${arch}.${ext}"
+  identity: null
+  hardenedRuntime: false
+
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

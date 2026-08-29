@@ -12,6 +12,7 @@ import ForgotPasswordScreen from './components/Auth/ForgotPasswordScreen'
 import UpdateBanner from './components/Update/UpdateBanner'
 
 export default function App() {
+  const isMac = window.api.platform === 'darwin'
   const [verificationEmail, setVerificationEmail] = useState('')
   const [passwordResetEmail, setPasswordResetEmail] = useState('')
   const [showForgotPassword, setShowForgotPassword] = useState(false)
@@ -107,7 +108,7 @@ export default function App() {
         <TitlebarMinimal />
       ) : (
         <div style={styles.titlebar} className="titlebar">
-          <div style={styles.titlebarDrag}>
+          <div style={{ ...styles.titlebarDrag, paddingLeft: isMac ? 80 : 12 }}>
             <div style={styles.appIcon}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2">
                 <rect x="2" y="3" width="20" height="14" rx="2"/>
@@ -130,25 +131,29 @@ export default function App() {
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
               </svg>
             </button>
-            <button style={styles.titlebarBtn} onClick={() => window.api.windowMinimize()} title="Minimize">
-              <svg width="10" height="2" viewBox="0 0 10 2" fill="currentColor">
-                <rect width="10" height="2"/>
-              </svg>
-            </button>
-            <button style={styles.titlebarBtn} onClick={() => window.api.windowMaximize()} title="Maximize">
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="0.75" y="0.75" width="8.5" height="8.5"/>
-              </svg>
-            </button>
-            <button
-              style={{ ...styles.titlebarBtn, ...styles.closeBtn }}
-              onClick={() => window.api.windowClose()}
-              title="Close"
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M1 1l8 8M9 1l-8 8"/>
-              </svg>
-            </button>
+            {!isMac && (
+              <>
+                <button style={styles.titlebarBtn} onClick={() => window.api.windowMinimize()} title="Minimize">
+                  <svg width="10" height="2" viewBox="0 0 10 2" fill="currentColor">
+                    <rect width="10" height="2"/>
+                  </svg>
+                </button>
+                <button style={styles.titlebarBtn} onClick={() => window.api.windowMaximize()} title="Maximize">
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <rect x="0.75" y="0.75" width="8.5" height="8.5"/>
+                  </svg>
+                </button>
+                <button
+                  style={{ ...styles.titlebarBtn, ...styles.closeBtn }}
+                  onClick={() => window.api.windowClose()}
+                  title="Close"
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M1 1l8 8M9 1l-8 8"/>
+                  </svg>
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -236,19 +241,22 @@ export default function App() {
 
 // 인증 페이지 전용 타이틀바 (최소화 + 닫기)
 function TitlebarMinimal() {
+  const isMac = window.api.platform === 'darwin'
   return (
     <div style={stylesTitlebarMinimal.bar} className="titlebar">
       <div style={{ flex: 1 }} />
-      <div className="titlebar-controls" style={stylesTitlebarMinimal.controls}>
-        <button style={stylesTitlebarMinimal.btn} onClick={() => window.api.windowMinimize()} title="Minimize">
-          <svg width="10" height="2" viewBox="0 0 10 2" fill="currentColor"><rect width="10" height="2"/></svg>
-        </button>
-        <button style={stylesTitlebarMinimal.btn} onClick={() => window.api.windowClose()} title="Close">
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M1 1l8 8M9 1l-8 8"/>
-          </svg>
-        </button>
-      </div>
+      {!isMac && (
+        <div className="titlebar-controls" style={stylesTitlebarMinimal.controls}>
+          <button style={stylesTitlebarMinimal.btn} onClick={() => window.api.windowMinimize()} title="Minimize">
+            <svg width="10" height="2" viewBox="0 0 10 2" fill="currentColor"><rect width="10" height="2"/></svg>
+          </button>
+          <button style={stylesTitlebarMinimal.btn} onClick={() => window.api.windowClose()} title="Close">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M1 1l8 8M9 1l-8 8"/>
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   )
 }

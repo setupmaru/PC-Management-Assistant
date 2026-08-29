@@ -60,6 +60,7 @@ export default function NetworkCard() {
 
 const styles: Record<string, React.CSSProperties> = {
   card: {
+    gridColumn: '1 / -1',
     background: '#1e293b',
     border: '1px solid #334155',
     borderRadius: 10,

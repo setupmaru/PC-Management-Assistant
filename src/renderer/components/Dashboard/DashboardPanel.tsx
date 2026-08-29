@@ -1,4 +1,5 @@
 import CpuCard from './CpuCard'
+import GpuCard from './GpuCard'
 import MemoryCard from './MemoryCard'
 import DiskCard from './DiskCard'
 import NetworkCard from './NetworkCard'
@@ -11,6 +12,7 @@ import BootOptimizationCard from './BootOptimizationCard'
 import { useAppStore } from '../../store/appStore'
 
 export default function DashboardPanel() {
+  const isWindows = window.api.platform === 'win32'
   const metrics = useAppStore((s) => s.metrics)
   const authStatus = useAppStore((s) => s.authStatus)
   const currentUser = useAppStore((s) => s.currentUser)
@@ -45,13 +47,14 @@ export default function DashboardPanel() {
       <div style={styles.content}>
         <div style={styles.cardGrid}>
           <CpuCard />
+          <GpuCard />
           <MemoryCard />
           <DiskCard />
           <NetworkCard />
         </div>
 
-        <NetworkHealthCard />
-        <BootOptimizationCard />
+        {isWindows && <NetworkHealthCard />}
+        {isWindows && <BootOptimizationCard />}
 
         <div style={styles.section}>
           <div style={styles.sectionHeader}>
@@ -60,15 +63,17 @@ export default function DashboardPanel() {
           <ProcessTable />
         </div>
 
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>
-            <span style={styles.sectionTitle}>EVENTS (24H)</span>
+        {isWindows && (
+          <div style={styles.section}>
+            <div style={styles.sectionHeader}>
+              <span style={styles.sectionTitle}>EVENTS (24H)</span>
+            </div>
+            <AlertBanner />
           </div>
-          <AlertBanner />
-        </div>
+        )}
 
-        <WindowsUpdateCard />
-        <SystemMaintenanceCard />
+        {isWindows && <WindowsUpdateCard />}
+        {isWindows && <SystemMaintenanceCard />}
 
         {authStatus === 'authenticated' && (
           <div style={styles.userBar}>

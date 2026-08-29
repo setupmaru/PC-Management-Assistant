@@ -20,6 +20,7 @@ export interface FullSnapshot {
 }
 
 export class DataCollectorService {
+  private readonly isWindows = process.platform === 'win32'
   private win: BrowserWindow | null = null
   private eventLogCollector = new EventLogCollector()
   private windowsUpdateCollector = new WindowsUpdateCollector()
@@ -40,12 +41,14 @@ export class DataCollectorService {
     this.win = win
     await warmupSystemInfo()
 
-    this.bootOptimizer.initialize((snapshot) => {
-      this.win?.webContents.send('diagnostics:bootUpdate', snapshot)
-    })
-    this.networkMonitor.initialize((snapshot) => {
-      this.win?.webContents.send('diagnostics:networkUpdate', snapshot)
-    }, () => this.bootOptimizer.createMarkdownReport()).catch(() => {})
+    if (this.isWindows) {
+      this.bootOptimizer.initialize((snapshot) => {
+        this.win?.webContents.send('diagnostics:bootUpdate', snapshot)
+      })
+      this.networkMonitor.initialize((snapshot) => {
+        this.win?.webContents.send('diagnostics:networkUpdate', snapshot)
+      }, () => this.bootOptimizer.createMarkdownReport()).catch(() => {})
+    }
 
     this.metricsTimer = setInterval(async () => {
       try {
@@ -68,39 +71,41 @@ export class DataCollectorService {
       }
     }, 10000)
 
-    this.eventTimer = setInterval(async () => {
-      try {
-        const events = await this.eventLogCollector.collect()
-        this.win?.webContents.send('system:eventsUpdate', events)
-      } catch {
-        // ignore event log errors
-      }
-    }, 60000)
+    if (this.isWindows) {
+      this.eventTimer = setInterval(async () => {
+        try {
+          const events = await this.eventLogCollector.collect()
+          this.win?.webContents.send('system:eventsUpdate', events)
+        } catch {
+          // ignore event log errors
+        }
+      }, 60000)
 
-    this.updateTimer = setInterval(async () => {
-      try {
-        this.win?.webContents.send('system:windowsUpdateUpdate', {
-          ...this.windowsUpdateCollector.getLastResult(),
-          isChecking: true,
-        })
-        const result = await this.windowsUpdateCollector.collect(true)
-        this.win?.webContents.send('system:windowsUpdateUpdate', result)
-      } catch {
-        // ignore windows update check errors
-      }
-    }, 30 * 60 * 1000)
+      this.updateTimer = setInterval(async () => {
+        try {
+          this.win?.webContents.send('system:windowsUpdateUpdate', {
+            ...this.windowsUpdateCollector.getLastResult(),
+            isChecking: true,
+          })
+          const result = await this.windowsUpdateCollector.collect(true)
+          this.win?.webContents.send('system:windowsUpdateUpdate', result)
+        } catch {
+          // ignore windows update check errors
+        }
+      }, 30 * 60 * 1000)
 
-    // Auto apply Windows updates every 6 hours.
-    this.autoUpdateApplyTimer = setInterval(async () => {
-      try {
-        const step = await this.maintenanceService.runAutoWindowsUpdateApply()
-        if (!step) return
-        const result = await this.windowsUpdateCollector.collect(true)
-        this.win?.webContents.send('system:windowsUpdateUpdate', result)
-      } catch {
-        // ignore auto apply errors
-      }
-    }, 6 * 60 * 60 * 1000)
+      // Auto apply Windows updates every 6 hours.
+      this.autoUpdateApplyTimer = setInterval(async () => {
+        try {
+          const step = await this.maintenanceService.runAutoWindowsUpdateApply()
+          if (!step) return
+          const result = await this.windowsUpdateCollector.collect(true)
+          this.win?.webContents.send('system:windowsUpdateUpdate', result)
+        } catch {
+          // ignore auto apply errors
+        }
+      }, 6 * 60 * 60 * 1000)
+    }
 
     this.lastMetrics = await collectSystemMetrics()
     this.lastProcesses = await collectTopProcesses()
@@ -108,24 +113,28 @@ export class DataCollectorService {
       metrics: this.lastMetrics,
       processes: this.lastProcesses,
     })
-    await this.eventLogCollector.collect(true)
+    if (this.isWindows) {
+      await this.eventLogCollector.collect(true)
 
-    this.win?.webContents.send('system:windowsUpdateUpdate', {
-      ...this.windowsUpdateCollector.getLastResult(),
-      isChecking: true,
-    })
-    this.windowsUpdateCollector.collect(true).then((result) => {
-      this.win?.webContents.send('system:windowsUpdateUpdate', result)
-    }).catch(() => {
-      // ignore windows update bootstrap errors
-    })
+      this.win?.webContents.send('system:windowsUpdateUpdate', {
+        ...this.windowsUpdateCollector.getLastResult(),
+        isChecking: true,
+      })
+      this.windowsUpdateCollector.collect(true).then((result) => {
+        this.win?.webContents.send('system:windowsUpdateUpdate', result)
+      }).catch(() => {
+        // ignore windows update bootstrap errors
+      })
+    }
   }
 
   async getFreshSnapshot(): Promise<FullSnapshot> {
     const [metrics, processes, events] = await Promise.all([
       collectSystemMetrics(),
       collectTopProcesses(),
-      this.eventLogCollector.collect(),
+      this.isWindows
+        ? this.eventLogCollector.collect()
+        : Promise.resolve(this.eventLogCollector.getLastResult()),
     ])
     this.lastMetrics = metrics
     this.lastProcesses = processes

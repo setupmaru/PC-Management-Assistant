@@ -19,6 +19,14 @@ export interface SystemMetricsUpdate {
       model?: string
       temperature?: number
     }
+    gpu: {
+      usage: number | null
+      model: string
+      vendor?: string
+      memoryTotalMb?: number
+      memoryUsedMb?: number
+      temperature?: number
+    } | null
     memory: { total: number; used: number; free: number; usagePercent: number }
     disks: { mount: string; fs: string; size: number; used: number; usagePercent: number }[]
     network: { iface: string; rxSec: number; txSec: number }[]
@@ -114,6 +122,8 @@ export interface UpdateApplyResult {
 }
 
 const api = {
+  platform: process.platform,
+
   auth: {
     login: (email: string, password: string) =>
       ipcRenderer.invoke('auth:login', email, password) as Promise<{
