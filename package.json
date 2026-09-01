@@ -1,6 +1,7 @@
 {
   "name": "pc-management-assistant",
-  "version": "1.0.14.1",
+  "version": "1.0.15-revision.1",
+  "releaseVersion": "1.0.14.1",
   "description": "PC management assistant - system diagnostics and AI chat",
   "main": "dist-electron/main.js",
   "scripts": {

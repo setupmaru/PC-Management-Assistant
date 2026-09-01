@@ -1,44 +1,17 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
-import {
-  AppImageUpdater,
-  AppUpdater as ElectronAppUpdater,
-  MacUpdater,
-  NsisUpdater,
-} from 'electron-updater'
-import { ElectronAppAdapter } from 'electron-updater/out/ElectronAppAdapter'
+import { autoUpdater } from 'electron-updater'
+import packageMetadata from '../../package.json'
 import { AppUpdateState } from '../shared/updater'
 
 const UPDATE_STATE_CHANNEL = 'app:updateState'
 const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000
-
-function toUpdaterVersion(version: string): string {
-  const revisionVersion = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(version)
-  if (!revisionVersion) return version
-
-  const [, major, minor, patch, revision] = revisionVersion
-  return `${major}.${minor}.${Number(patch) + 1}-revision.${revision}`
-}
-
-class RevisionAwareAppAdapter extends ElectronAppAdapter {
-  get version(): string {
-    return toUpdaterVersion(super.version)
-  }
-}
-
-function createAutoUpdater(): ElectronAppUpdater {
-  const adapter = new RevisionAwareAppAdapter(app)
-  if (process.platform === 'win32') return new NsisUpdater(null, adapter)
-  if (process.platform === 'darwin') return new MacUpdater(undefined, adapter)
-  return new AppImageUpdater(null, adapter)
-}
-
-const autoUpdater = createAutoUpdater()
+const DISPLAY_VERSION = packageMetadata.releaseVersion ?? app.getVersion()
 
 function createInitialState(): AppUpdateState {
   return {
     enabled: false,
     status: 'disabled',
-    currentVersion: app.getVersion(),
+    currentVersion: DISPLAY_VERSION,
     availableVersion: null,
     progressPercent: null,
     transferredBytes: 0,
@@ -80,6 +53,9 @@ export class AppUpdater {
 
     autoUpdater.autoDownload = true
     autoUpdater.autoInstallOnAppQuit = false
+    // Revision releases use an internal prerelease SemVer for monotonic update
+    // comparison, but GitHub publishes them as normal releases on latest.yml.
+    autoUpdater.allowPrerelease = false
 
     autoUpdater.on('checking-for-update', () => {
       this.setState({
@@ -165,7 +141,7 @@ export class AppUpdater {
   getState(): AppUpdateState {
     return {
       ...this.state,
-      currentVersion: app.getVersion(),
+      currentVersion: DISPLAY_VERSION,
     }
   }
 
@@ -242,7 +218,7 @@ export class AppUpdater {
     this.state = {
       ...this.state,
       ...next,
-      currentVersion: app.getVersion(),
+      currentVersion: DISPLAY_VERSION,
     }
     this.emitState()
   }

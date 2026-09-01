@@ -1,5 +1,7 @@
 appId: com.pcmanagement.assistant
 productName: PC Management Assistant
+buildVersion: "1.0.14.1"
+detectUpdateChannel: false
 directories:
   buildResources: resources
   output: release
@@ -36,6 +38,7 @@ win:
   forceCodeSigning: false
 
 mac:
+  bundleShortVersion: "1.0.15"
   target:
     - target: dmg
       arch:
