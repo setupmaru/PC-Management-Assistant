@@ -7,6 +7,7 @@ import { ALLOWED_ORIGINS, IS_PRODUCTION, NODE_ENV } from './config/env'
 import { HOST, PORT, PUBLIC_BASE_URL } from './config/app'
 import authRouter from './routes/auth'
 import billingRouter from './routes/billing'
+import chatRouter from './routes/chat'
 import subscriptionRouter from './routes/subscription'
 import webhookRouter from './routes/webhook'
 import windowsUpdateRouter from './routes/windowsUpdate'
@@ -29,6 +30,8 @@ app.use(
   })
 )
 app.use('/api/polar/webhook', express.raw({ type: 'application/json', limit: '256kb' }), webhookRouter)
+// Authenticate chat requests before accepting their larger image-capable JSON bodies.
+app.use('/api/chat', chatRouter)
 app.use(express.json({ limit: '1mb' }))
 
 app.use('/api/auth', authRouter)

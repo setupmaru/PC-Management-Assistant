@@ -2,6 +2,7 @@ import Store from 'electron-store'
 import { safeStorage } from 'electron'
 
 interface StoreSchema {
+  // Removed from current builds; retained only so upgrades can delete it.
   encryptedApiKey?: string
   encryptedRefreshToken?: string
   windowBounds?: { x: number; y: number; width: number; height: number }
@@ -36,24 +37,9 @@ function decryptValue(stored: string): string {
   return Buffer.from(stored, 'base64').toString('utf8')
 }
 
-// ── API Key ───────────────────────────────────────────
-export function saveApiKey(apiKey: string): void {
-  const store = getStore()
-  if (!apiKey) {
-    store.delete('encryptedApiKey')
-    return
-  }
-  store.set('encryptedApiKey', encryptValue(apiKey))
-}
-
-export function loadApiKey(): string | null {
-  const stored = getStore().get('encryptedApiKey')
-  if (!stored) return null
-  try {
-    return decryptValue(stored)
-  } catch {
-    return null
-  }
+// Delete API keys saved by versions that called OpenAI from the desktop app.
+export function clearLegacyApiKey(): void {
+  getStore().delete('encryptedApiKey')
 }
 
 // ── Refresh Token ─────────────────────────────────────

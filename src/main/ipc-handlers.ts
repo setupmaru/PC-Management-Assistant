@@ -8,8 +8,6 @@ import { ClaudeService } from './claude/client'
 import { buildSystemPrompt } from './claude/prompt-builder'
 import { ChatImageAttachment, ChatSendPayload } from '../shared/chat'
 import {
-  saveApiKey,
-  loadApiKey,
   saveRefreshToken,
   loadRefreshToken,
   clearRefreshToken,
@@ -826,24 +824,6 @@ export function registerIpcHandlers(
     }
   })
 
-  ipcMain.handle('settings:saveApiKey', async (_event, apiKey: string) => {
-    try {
-      saveApiKey(apiKey)
-      claude.updateApiKey(apiKey)
-      return { success: true }
-    } catch (err) {
-      return { success: false, error: String(err) }
-    }
-  })
-
-  ipcMain.handle('settings:loadApiKey', async () => {
-    const key = loadApiKey()
-    return {
-      hasKey: !!key,
-      maskedKey: key ? `${key.substring(0, 8)}${'*'.repeat(20)}` : null,
-    }
-  })
-
   ipcMain.handle('chat:sendMessage', async (_event, rawPayload: ChatSendPayload) => {
     try {
       const payload = normalizeChatPayload(rawPayload)
@@ -851,23 +831,22 @@ export function registerIpcHandlers(
         return { success: false, error: '메시지 내용이 비어 있습니다.' }
       }
 
-      try {
-        const limitRes = await authenticatedFetch('/subscription/chat-use', { method: 'POST' })
-        const limitData = await limitRes.json() as { allowed: boolean; remaining: number; error?: string }
-        if (!limitData.allowed) {
-          const msg = limitRes.status === 403
-            ? '채팅은 Plus 이상 플랜에서 사용 가능합니다.'
-            : '오늘 채팅 한도를 초과했습니다. Pro 플랜에서 무제한으로 이용 가능합니다.'
-          win.webContents.send('chat:streamChunk', { text: `> **제한**: ${msg}`, done: true })
-          return { success: false, error: msg }
-        }
-      } catch {
-        // Ignore quota API errors and continue to keep offline behavior.
-      }
-
       const snapshot = await collector.getFreshSnapshot()
       const systemPrompt = buildSystemPrompt(snapshot)
-      await claude.streamMessage(payload, systemPrompt)
+      await claude.streamMessage(payload, systemPrompt, async (request) => {
+        const response = await authenticatedFetch('/chat/completions', {
+          method: 'POST',
+          body: JSON.stringify(request),
+        })
+        const data = await response.json().catch(() => ({})) as {
+          text?: string
+          error?: string
+        }
+        if (!response.ok || !data.text) {
+          throw new Error(data.error ?? 'AI 서버 요청에 실패했습니다.')
+        }
+        return data.text
+      })
       return { success: true }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err)

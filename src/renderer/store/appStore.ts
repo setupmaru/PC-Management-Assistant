@@ -111,11 +111,6 @@ interface AppState {
   pendingWindowsUpdateConflictSessionId: string | null
   setPendingWindowsUpdateConflictSessionId: (sessionId: string | null) => void
 
-  // 설정
-  hasApiKey: boolean
-  maskedApiKey: string | null
-  setApiKeyStatus: (hasKey: boolean, maskedKey: string | null) => void
-
   // UI
   showSettings: boolean
   setShowSettings: (v: boolean) => void
@@ -216,11 +211,6 @@ export const useAppStore = create<AppState>((set) => ({
   pendingWindowsUpdateConflictSessionId: null,
   setPendingWindowsUpdateConflictSessionId: (pendingWindowsUpdateConflictSessionId) =>
     set({ pendingWindowsUpdateConflictSessionId }),
-
-  // 설정
-  hasApiKey: false,
-  maskedApiKey: null,
-  setApiKeyStatus: (hasKey, maskedKey) => set({ hasApiKey: hasKey, maskedApiKey: maskedKey }),
 
   // UI
   showSettings: false,

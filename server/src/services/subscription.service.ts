@@ -292,21 +292,18 @@ export async function cancelSubscription(userId: string): Promise<void> {
 
 export async function checkAndUseChatLimit(userId: string): Promise<{ allowed: boolean; remaining: number }> {
   const today = new Date().toISOString().slice(0, 10)
-  const checkResult = await pool.query<{ count: number }>(
-    `SELECT count FROM chat_usage WHERE user_id = $1 AND date = $2`,
-    [userId, today]
+  const result = await pool.query<{ count: number }>(
+    `INSERT INTO chat_usage (user_id, date, count) VALUES ($1, $2, 1)
+     ON CONFLICT (user_id, date) DO UPDATE
+       SET count = chat_usage.count + 1
+       WHERE chat_usage.count < $3
+     RETURNING count`,
+    [userId, today, PLUS_DAILY_LIMIT]
   )
-
-  const currentCount = checkResult.rows[0]?.count ?? 0
-  if (currentCount >= PLUS_DAILY_LIMIT) {
+  const count = result.rows[0]?.count
+  if (count === undefined) {
     return { allowed: false, remaining: 0 }
   }
 
-  await pool.query(
-    `INSERT INTO chat_usage (user_id, date, count) VALUES ($1, $2, 1)
-     ON CONFLICT (user_id, date) DO UPDATE SET count = chat_usage.count + 1`,
-    [userId, today]
-  )
-
-  return { allowed: true, remaining: PLUS_DAILY_LIMIT - currentCount - 1 }
+  return { allowed: true, remaining: PLUS_DAILY_LIMIT - count }
 }

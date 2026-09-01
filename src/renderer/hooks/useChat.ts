@@ -12,7 +12,6 @@ export function useChat() {
     appendStreamChunk,
     finishAssistantMessage,
     clearMessages,
-    hasApiKey,
     pendingWindowsUpdateConflictSessionId,
     setPendingWindowsUpdateConflictSessionId,
   } = useAppStore()
@@ -56,7 +55,6 @@ export function useChat() {
     const userText = payload.text.trim()
 
     if ((!userText && payload.attachments.length === 0) || isStreaming) return
-    if (!hasApiKey && !pendingWindowsUpdateConflictSessionId) return
 
     if (pendingWindowsUpdateConflictSessionId) {
       if (!userText) return
@@ -104,7 +102,6 @@ export function useChat() {
     isStreaming,
     sendMessage,
     clearChat,
-    hasApiKey,
     pendingWindowsUpdateConflictSessionId,
   }
 }

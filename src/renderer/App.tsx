@@ -17,7 +17,7 @@ export default function App() {
   const [passwordResetEmail, setPasswordResetEmail] = useState('')
   const [showForgotPassword, setShowForgotPassword] = useState(false)
   const {
-    showSettings, setShowSettings, setApiKeyStatus,
+    showSettings, setShowSettings,
     authStatus, setAuthStatus, setCurrentUser, setSubscriptionStatus,
     currentUser,
     showPricingModal, setShowPricingModal,
@@ -41,13 +41,9 @@ export default function App() {
   }, [setAuthStatus, setCurrentUser])
 
 
-  // 인증 후 API 키 + 구독 상태 로드
+  // 인증 후 구독 상태 로드
   useEffect(() => {
     if (authStatus !== 'authenticated') return
-
-    window.api.loadApiKey().then((res) => {
-      setApiKeyStatus(res.hasKey, res.maskedKey)
-    })
 
     window.api.subscription.getStatus().then((res) => {
       if (res.success && res.data) {
@@ -171,7 +167,7 @@ export default function App() {
           </div>
           {(currentUser?.plan === 'plus' || currentUser?.plan === 'pro') && (
             <div style={styles.chatPane}>
-              <ChatPanel onOpenSettings={() => setShowSettings(true)} />
+              <ChatPanel />
             </div>
           )}
         </div>

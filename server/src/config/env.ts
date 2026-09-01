@@ -120,6 +120,9 @@ const EMAIL_VERIFICATION_SECRET = readOptional('EMAIL_VERIFICATION_SECRET') ?? J
 const EMAIL_VERIFICATION_TTL_MINUTES = readInteger('EMAIL_VERIFICATION_TTL_MINUTES', 10)
 const EMAIL_VERIFICATION_RESEND_SECONDS = readInteger('EMAIL_VERIFICATION_RESEND_SECONDS', 60)
 
+const OPENAI_API_KEY = readOptional('OPENAI_API_KEY') ?? ''
+const OPENAI_MODEL = readOptional('OPENAI_MODEL') ?? 'gpt-4o-mini'
+
 const ALLOWED_ORIGINS = (() => {
   const configured = parseOriginList(readOptional('ALLOWED_ORIGINS'))
   if (configured.length > 0) return unique(configured)
@@ -143,6 +146,8 @@ export {
   JWT_ACCESS_SECRET,
   JWT_REFRESH_SECRET,
   NODE_ENV,
+  OPENAI_API_KEY,
+  OPENAI_MODEL,
   POLAR_ACCESS_TOKEN,
   POLAR_ENVIRONMENT,
   POLAR_PLUS_CHECKOUT_URL,

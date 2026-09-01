@@ -6,6 +6,7 @@
 - Set `PUBLIC_BASE_URL=http://api.setupmaru.com:3400`.
 - Set `ALLOWED_ORIGINS=http://api.setupmaru.com:3400`.
 - Fill in `DATABASE_URL`, `JWT_ACCESS_SECRET`, and `JWT_REFRESH_SECRET`.
+- Set `OPENAI_API_KEY` on the server. Optionally set `OPENAI_MODEL` (defaults to `gpt-4o-mini`).
 - Complete the Stripe Connect payout setup in the Polar dashboard.
 - Create monthly Plus (KRW 4,900) and Pro (KRW 15,000) products in Polar, then set
   both product IDs. Configure either an API access token or both Checkout Link URLs.
@@ -48,6 +49,9 @@ Minimal option:
 4. Run `npm ci && npm run build` inside `server`.
 5. Restart the production process.
 6. Verify `/health` and `/api/health`.
+
+The OpenAI key must exist only in `server/.env` or the server process environment. Do not
+put it in the desktop app `.env`, Vite defines, packaged resources, or user settings.
 
 ## Polar payments
 

@@ -10,23 +10,18 @@ export interface ChatMessage {
   content: string | ChatContentPart[]
 }
 
-const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini'
+export interface ServerChatRequest {
+  systemPrompt: string
+  messages: ChatMessage[]
+}
+
+export type RequestChatCompletion = (request: ServerChatRequest) => Promise<string>
+
 const MAX_HISTORY = 20
 
 export class ClaudeService {
-  private apiKey: string | null = null
   private history: ChatMessage[] = []
   private win: BrowserWindow | null = null
-
-  initialize(apiKey: string, win: BrowserWindow): void {
-    this.updateApiKey(apiKey)
-    this.win = win
-  }
-
-  updateApiKey(apiKey: string): void {
-    const trimmed = apiKey.trim()
-    this.apiKey = trimmed.length > 0 ? trimmed : null
-  }
 
   setWindow(win: BrowserWindow): void {
     this.win = win
@@ -53,11 +48,11 @@ export class ClaudeService {
     return parts
   }
 
-  async streamMessage(payload: ChatSendPayload, systemPrompt: string): Promise<string> {
-    if (!this.apiKey) {
-      throw new Error('OpenAI API key가 설정되지 않았습니다.')
-    }
-
+  async streamMessage(
+    payload: ChatSendPayload,
+    systemPrompt: string,
+    requestCompletion: RequestChatCompletion
+  ): Promise<string> {
     this.history.push({ role: 'user', content: this.buildUserContent(payload) })
     if (this.history.length > MAX_HISTORY * 2) {
       this.history = this.history.slice(-MAX_HISTORY * 2)
@@ -66,42 +61,25 @@ export class ClaudeService {
     let fullText = ''
 
     try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          max_tokens: 2048,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...this.history.map((message) => ({
-              role: message.role,
-              content: message.content,
-            })),
-          ],
-        }),
-      })
-
-      if (!res.ok) {
-        const errText = await res.text()
-        throw new Error(`OpenAI API error (${res.status}): ${errText}`)
-      }
-
-      const data = await res.json() as {
-        choices?: Array<{
-          message?: {
-            content?: string
-          }
-        }>
-      }
-
-      fullText = data.choices?.[0]?.message?.content?.trim() ?? ''
+      fullText = (await requestCompletion({
+        systemPrompt,
+        messages: this.history,
+      })).trim()
 
       if (!fullText) {
-        throw new Error('API 응답이 비어 있습니다. API 키와 모델을 확인해주세요.')
+        throw new Error('AI 응답이 비어 있습니다. 잠시 후 다시 시도해주세요.')
+      }
+
+      // The current request needs image data, but retaining base64 images in
+      // history would make every later server request unnecessarily large.
+      if (payload.attachments.length > 0) {
+        const text = payload.text.trim()
+        this.history[this.history.length - 1] = {
+          role: 'user',
+          content: [text, `[이미지 ${payload.attachments.length}개 첨부]`]
+            .filter(Boolean)
+            .join('\n'),
+        }
       }
 
       this.win?.webContents.send('chat:streamChunk', { text: fullText, done: false })

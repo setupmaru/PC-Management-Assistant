@@ -205,9 +205,6 @@ const api = {
       }>,
   },
 
-  saveApiKey: (key: string) => ipcRenderer.invoke('settings:saveApiKey', key),
-  loadApiKey: () => ipcRenderer.invoke('settings:loadApiKey') as Promise<{ hasKey: boolean; maskedKey: string | null }>,
-
   sendMessage: (payload: ChatSendPayload) => ipcRenderer.invoke('chat:sendMessage', payload),
   clearHistory: () => ipcRenderer.invoke('chat:clearHistory'),
 

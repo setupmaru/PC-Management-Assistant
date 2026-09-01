@@ -17,9 +17,6 @@ export default defineConfig({
       {
         entry: resolve(__dirname, 'src/main/main.ts'),
         vite: {
-          define: {
-            __EMBEDDED_API_KEY__: JSON.stringify(process.env.EMBEDDED_API_KEY || ''),
-          },
           build: {
             outDir: distElectron,
             sourcemap: false,

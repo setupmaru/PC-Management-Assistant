@@ -1,9 +1,38 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
-import { autoUpdater } from 'electron-updater'
+import {
+  AppImageUpdater,
+  AppUpdater as ElectronAppUpdater,
+  MacUpdater,
+  NsisUpdater,
+} from 'electron-updater'
+import { ElectronAppAdapter } from 'electron-updater/out/ElectronAppAdapter'
 import { AppUpdateState } from '../shared/updater'
 
 const UPDATE_STATE_CHANNEL = 'app:updateState'
 const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000
+
+function toUpdaterVersion(version: string): string {
+  const revisionVersion = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(version)
+  if (!revisionVersion) return version
+
+  const [, major, minor, patch, revision] = revisionVersion
+  return `${major}.${minor}.${Number(patch) + 1}-revision.${revision}`
+}
+
+class RevisionAwareAppAdapter extends ElectronAppAdapter {
+  get version(): string {
+    return toUpdaterVersion(super.version)
+  }
+}
+
+function createAutoUpdater(): ElectronAppUpdater {
+  const adapter = new RevisionAwareAppAdapter(app)
+  if (process.platform === 'win32') return new NsisUpdater(null, adapter)
+  if (process.platform === 'darwin') return new MacUpdater(undefined, adapter)
+  return new AppImageUpdater(null, adapter)
+}
+
+const autoUpdater = createAutoUpdater()
 
 function createInitialState(): AppUpdateState {
   return {

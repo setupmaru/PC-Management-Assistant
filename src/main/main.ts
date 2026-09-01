@@ -1,11 +1,10 @@
-﻿declare const __EMBEDDED_API_KEY__: string
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'path'
 import dotenv from 'dotenv'
 import { DataCollectorService } from './collectors'
 import { ClaudeService } from './claude/client'
 import { registerIpcHandlers } from './ipc-handlers'
-import { loadApiKey, loadWindowBounds, saveWindowBounds } from './store'
+import { clearLegacyApiKey, loadWindowBounds, saveWindowBounds } from './store'
 import { warmupSystemInfo } from './collectors/system-metrics'
 import { AppUpdater } from './updater'
 
@@ -105,11 +104,7 @@ app.whenReady().then(async () => {
   mainWindow = createWindow()
   updater.initialize(isDev)
 
-  // API ??濡쒕뱶 ??Claude 珥덇린??(??λ맂 ???놁쑝硫?鍮뚮뱶?????ъ슜)
-  const apiKey = loadApiKey() || __EMBEDDED_API_KEY__ || null
-  if (apiKey) {
-    claude.updateApiKey(apiKey)
-  }
+  clearLegacyApiKey()
   claude.setWindow(mainWindow)
 
   // IPC ?몃뱾?щ? 癒쇱? ?깅줉 (renderer媛 ready-to-show ?꾩뿉 ?몄텧?????덉쓬)

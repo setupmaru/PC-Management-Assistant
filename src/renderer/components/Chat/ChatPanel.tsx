@@ -4,19 +4,14 @@ import MessageBubble from './MessageBubble'
 import InputBar from './InputBar'
 import { useAppStore } from '../../store/appStore'
 
-const FREE_DAILY_LIMIT = 10
+const PLUS_DAILY_LIMIT = 5
 
-interface Props {
-  onOpenSettings: () => void
-}
-
-export default function ChatPanel({ onOpenSettings }: Props) {
+export default function ChatPanel() {
   const {
     messages,
     isStreaming,
     sendMessage,
     clearChat,
-    hasApiKey,
     pendingWindowsUpdateConflictSessionId,
   } = useChat()
   const { currentUser } = useAppStore()
@@ -35,7 +30,7 @@ export default function ChatPanel({ onOpenSettings }: Props) {
     )
   }).length
 
-  const isFreeLimitReached = !isPro && todayUserMessages >= FREE_DAILY_LIMIT
+  const isPlusLimitReached = !isPro && todayUserMessages >= PLUS_DAILY_LIMIT
 
   const lastContent = messages[messages.length - 1]?.content ?? ''
   useEffect(() => {
@@ -51,7 +46,7 @@ export default function ChatPanel({ onOpenSettings }: Props) {
           {isStreaming && <span style={styles.streamingBadge}>답변 중...</span>}
           {!isPro && (
             <span style={styles.limitBadge}>
-              {todayUserMessages}/{FREE_DAILY_LIMIT}
+              {todayUserMessages}/{PLUS_DAILY_LIMIT}
             </span>
           )}
         </div>
@@ -65,10 +60,10 @@ export default function ChatPanel({ onOpenSettings }: Props) {
         </button>
       </div>
 
-      {isFreeLimitReached && (
+      {isPlusLimitReached && (
         <div style={styles.limitBanner}>
           <span style={styles.limitBannerText}>
-            오늘 무료 채팅 {FREE_DAILY_LIMIT}회를 모두 사용했습니다.
+            오늘 Plus 채팅 {PLUS_DAILY_LIMIT}회를 모두 사용했습니다.
           </span>
           <button
             style={styles.upgradeLinkBtn}
@@ -92,11 +87,9 @@ export default function ChatPanel({ onOpenSettings }: Props) {
             </div>
             <p style={styles.emptyTitle}>PC Management Assistant</p>
             <p style={styles.emptyDesc}>
-              {hasApiKey
-                ? '시스템 상태 분석, 에러 진단, 최적화 방법을 물어보세요.'
-                : '시작하려면 OpenAI API 키를 설정하세요.'}
+              시스템 상태 분석, 에러 진단, 최적화 방법을 물어보세요.
             </p>
-            {hasApiKey && !isFreeLimitReached && (
+            {!isPlusLimitReached && (
               <div style={styles.suggestions}>
                 {SUGGESTIONS.map((s) => (
                   <button
@@ -123,11 +116,8 @@ export default function ChatPanel({ onOpenSettings }: Props) {
 
       <InputBar
         onSend={sendMessage}
-        disabled={isStreaming || isFreeLimitReached}
-        hasApiKey={hasApiKey}
-        allowWithoutApiKey={!!pendingWindowsUpdateConflictSessionId}
+        disabled={isStreaming || isPlusLimitReached}
         supportsImagePaste={!pendingWindowsUpdateConflictSessionId}
-        onOpenSettings={onOpenSettings}
       />
     </div>
   )

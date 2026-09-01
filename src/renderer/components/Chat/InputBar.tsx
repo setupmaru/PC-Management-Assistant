@@ -4,10 +4,7 @@ import { ChatImageAttachment, ChatSendPayload } from '../../../shared/chat'
 interface Props {
   onSend: (payload: ChatSendPayload) => void
   disabled: boolean
-  hasApiKey: boolean
-  allowWithoutApiKey?: boolean
   supportsImagePaste?: boolean
-  onOpenSettings: () => void
 }
 
 const MAX_ATTACHMENTS = 4
@@ -54,10 +51,7 @@ async function fileToAttachment(file: File, index: number): Promise<ChatImageAtt
 export default function InputBar({
   onSend,
   disabled,
-  hasApiKey,
-  allowWithoutApiKey = false,
   supportsImagePaste = true,
-  onOpenSettings,
 }: Props) {
   const [value, setValue] = useState('')
   const [attachments, setAttachments] = useState<ChatImageAttachment[]>([])
@@ -67,7 +61,7 @@ export default function InputBar({
 
   const handleSend = () => {
     const text = value.trim()
-    if ((!text && attachments.length === 0) || disabled || (!hasApiKey && !allowWithoutApiKey)) return
+    if ((!text && attachments.length === 0) || disabled) return
 
     onSend({
       text,
@@ -259,17 +253,6 @@ export default function InputBar({
 
   const canSend = (value.trim().length > 0 || attachments.length > 0) && !disabled
 
-  if (!hasApiKey && !allowWithoutApiKey) {
-    return (
-      <div style={styles.noKeyWrapper}>
-        <span style={styles.noKeyText}>OpenAI API 키가 필요합니다.</span>
-        <button style={styles.setKeyBtn} onClick={onOpenSettings}>
-          API 키 설정
-        </button>
-      </div>
-    )
-  }
-
   return (
     <div
       style={{
@@ -434,28 +417,5 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     flexShrink: 0,
     transition: 'opacity 0.15s, transform 0.1s',
-  },
-  noKeyWrapper: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    padding: '14px 16px',
-    borderTop: '1px solid #334155',
-    background: '#0f172a',
-  },
-  noKeyText: {
-    color: '#94a3b8',
-    fontSize: 13,
-  },
-  setKeyBtn: {
-    background: '#3b82f6',
-    border: 'none',
-    color: '#fff',
-    padding: '7px 16px',
-    borderRadius: 8,
-    fontSize: 13,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
   },
 }

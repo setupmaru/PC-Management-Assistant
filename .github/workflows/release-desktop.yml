@@ -56,6 +56,18 @@ jobs:
       - name: Build Windows installer
         run: npx electron-builder --win --config.win.signAndEditExecutable=false --publish never
 
+      - name: Normalize updater version
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $updaterVersion = node scripts/updater-version.mjs $version
+          (Get-Content 'release/latest.yml') `
+            -replace '^version:.*$', "version: $updaterVersion" `
+            | Set-Content -Encoding utf8 'release/latest.yml'
+          if (-not (Select-String -Path 'release/latest.yml' -SimpleMatch "version: $updaterVersion" -Quiet)) {
+            throw 'Failed to normalize the Windows updater version'
+          }
+
       - name: Verify Windows packages
         shell: pwsh
         run: |
@@ -118,6 +130,15 @@ jobs:
 
       - name: Build macOS packages
         run: npx electron-builder --mac --x64 --arm64 --publish never
+
+      - name: Normalize updater version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          updater_version=$(node scripts/updater-version.mjs "$version")
+          sed -i '' -E "s/^version:.*$/version: $updater_version/" release/latest-mac.yml
+          grep -qx "version: $updater_version" release/latest-mac.yml
 
       - name: Verify macOS packages and architectures
         shell: bash
