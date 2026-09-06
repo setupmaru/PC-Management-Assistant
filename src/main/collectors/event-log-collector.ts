@@ -1,4 +1,9 @@
 import { runPowerShell } from '../utils/powershell'
+import { EventAutoRepairService } from '../maintenance/event-auto-repair'
+import {
+  createInitialEventAutoRepairState,
+  EventAutoRepairState,
+} from '../../shared/event-repair'
 
 export interface WindowsEvent {
   TimeCreated: string
@@ -12,6 +17,7 @@ export interface EventLogResult {
   events: WindowsEvent[]
   error?: string
   hasSecurityLog: boolean
+  autoRepair: EventAutoRepairState
 }
 
 const GET_EVENTS_SCRIPT = `
@@ -45,7 +51,12 @@ try {
 `
 
 export class EventLogCollector {
-  private lastResult: EventLogResult = { events: [], hasSecurityLog: false }
+  private autoRepairService = new EventAutoRepairService()
+  private lastResult: EventLogResult = {
+    events: [],
+    hasSecurityLog: false,
+    autoRepair: createInitialEventAutoRepairState(),
+  }
   private lastCollectedAt = 0
   private readonly POLL_INTERVAL = 60_000 // 60초
 
@@ -78,13 +89,15 @@ export class EventLogCollector {
       const hasSecurityLog =
         securityCheck.status === 'fulfilled' && securityCheck.value.trim() === 'true'
 
-      this.lastResult = { events, error, hasSecurityLog }
+      const autoRepair = await this.autoRepairService.process(events)
+      this.lastResult = { events, error, hasSecurityLog, autoRepair }
       this.lastCollectedAt = now
     } catch (err) {
       this.lastResult = {
         events: [],
         error: `이벤트 로그 수집 오류: ${err instanceof Error ? err.message : String(err)}`,
         hasSecurityLog: false,
+        autoRepair: this.autoRepairService.getState(),
       }
     }
 
@@ -93,5 +106,20 @@ export class EventLogCollector {
 
   getLastResult(): EventLogResult {
     return this.lastResult
+  }
+
+  async setAutoRepairEnabled(enabled: boolean): Promise<EventAutoRepairState> {
+    let state = this.autoRepairService.setEnabled(enabled)
+    if (enabled) {
+      state = await this.autoRepairService.process(this.lastResult.events, true)
+    }
+    this.lastResult = { ...this.lastResult, autoRepair: state }
+    return state
+  }
+
+  async runAutoRepair(): Promise<EventAutoRepairState> {
+    const state = await this.autoRepairService.process(this.lastResult.events, true)
+    this.lastResult = { ...this.lastResult, autoRepair: state }
+    return state
   }
 }

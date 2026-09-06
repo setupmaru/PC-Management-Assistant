@@ -11,6 +11,7 @@ import {
   NetworkHealthSnapshot,
   NetworkMonitorSettings,
 } from '../../shared/diagnostics'
+import { EventAutoRepairState } from '../../shared/event-repair'
 
 export interface FullSnapshot {
   metrics: SystemMetrics
@@ -157,6 +158,18 @@ export class DataCollectorService {
 
   async checkWindowsUpdates(): Promise<WindowsUpdateResult> {
     return this.windowsUpdateCollector.collect(true)
+  }
+
+  async setEventAutoRepairEnabled(enabled: boolean): Promise<EventAutoRepairState> {
+    const state = await this.eventLogCollector.setAutoRepairEnabled(enabled)
+    this.win?.webContents.send('system:eventsUpdate', this.eventLogCollector.getLastResult())
+    return state
+  }
+
+  async runEventAutoRepair(): Promise<EventAutoRepairState> {
+    const state = await this.eventLogCollector.runAutoRepair()
+    this.win?.webContents.send('system:eventsUpdate', this.eventLogCollector.getLastResult())
+    return state
   }
 
   async runSystemMaintenance(): Promise<SystemMaintenanceReport> {

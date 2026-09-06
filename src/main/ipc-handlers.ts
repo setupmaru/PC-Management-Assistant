@@ -876,6 +876,25 @@ export function registerIpcHandlers(
     return { success: true, data: collector.getLastSnapshot() }
   })
 
+  ipcMain.handle('events:setAutoRepairEnabled', async (_event, enabled: boolean) => {
+    if (typeof enabled !== 'boolean') {
+      return { success: false, error: '자동 복구 설정값이 올바르지 않습니다.' }
+    }
+    try {
+      return { success: true, data: await collector.setEventAutoRepairEnabled(enabled) }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('events:runAutoRepair', async () => {
+    try {
+      return { success: true, data: await collector.runEventAutoRepair() }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
   ipcMain.handle('system:checkWindowsUpdates', async () => {
     try {
       win.webContents.send('system:windowsUpdateUpdate', {

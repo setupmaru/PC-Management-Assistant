@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { ChatSendPayload } from '../shared/chat'
 import { AppUpdateState } from '../shared/updater'
+import { EventAutoRepairState } from '../shared/event-repair'
 import {
   BootOptimizationSnapshot,
   DiagnosticsResult,
@@ -84,6 +85,7 @@ export interface EventLogUpdate {
   }[]
   error?: string
   hasSecurityLog: boolean
+  autoRepair: EventAutoRepairState
 }
 
 export interface WindowsUpdateUpdate {
@@ -235,6 +237,13 @@ const api = {
       result?: ConflictResult
       error?: string
     }>,
+
+  events: {
+    setAutoRepairEnabled: (enabled: boolean) =>
+      ipcRenderer.invoke('events:setAutoRepairEnabled', enabled) as Promise<DiagnosticsResult<EventAutoRepairState>>,
+    runAutoRepair: () =>
+      ipcRenderer.invoke('events:runAutoRepair') as Promise<DiagnosticsResult<EventAutoRepairState>>,
+  },
 
   diagnostics: {
     getNetworkHealth: () =>

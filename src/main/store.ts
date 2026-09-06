@@ -7,6 +7,16 @@ interface StoreSchema {
   encryptedRefreshToken?: string
   windowBounds?: { x: number; y: number; width: number; height: number }
   theme?: 'dark' | 'light'
+  eventAutoRepairEnabled?: boolean
+  eventAutoRepairHistory?: EventAutoRepairHistoryEntry[]
+}
+
+export interface EventAutoRepairHistoryEntry {
+  fingerprint: string
+  ruleId: string
+  lastAttemptAt: number
+  attempts: number
+  succeeded: boolean
 }
 
 // app.whenReady() 이후에 사용 - lazy init
@@ -16,7 +26,7 @@ function getStore(): Store<StoreSchema> {
   if (!_store) {
     _store = new Store<StoreSchema>({
       name: 'pc-assistant-config',
-      defaults: { theme: 'dark' },
+      defaults: { theme: 'dark', eventAutoRepairEnabled: true },
     })
   }
   return _store
@@ -59,6 +69,33 @@ export function loadRefreshToken(): string | null {
 
 export function clearRefreshToken(): void {
   getStore().delete('encryptedRefreshToken')
+}
+
+// ── Event auto repair ─────────────────────────────────
+export function loadEventAutoRepairEnabled(): boolean {
+  return getStore().get('eventAutoRepairEnabled') !== false
+}
+
+export function saveEventAutoRepairEnabled(enabled: boolean): void {
+  getStore().set('eventAutoRepairEnabled', enabled)
+}
+
+export function loadEventAutoRepairHistory(): EventAutoRepairHistoryEntry[] {
+  const history = getStore().get('eventAutoRepairHistory')
+  if (!Array.isArray(history)) return []
+
+  return history.filter((entry) => (
+    typeof entry?.fingerprint === 'string'
+    && typeof entry.ruleId === 'string'
+    && Number.isFinite(entry.lastAttemptAt)
+    && Number.isInteger(entry.attempts)
+    && entry.attempts > 0
+    && typeof entry.succeeded === 'boolean'
+  ))
+}
+
+export function saveEventAutoRepairHistory(history: EventAutoRepairHistoryEntry[]): void {
+  getStore().set('eventAutoRepairHistory', history)
 }
 
 // ── Window Bounds ─────────────────────────────────────

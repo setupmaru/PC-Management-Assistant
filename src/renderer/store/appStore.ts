@@ -1,6 +1,10 @@
 import { create } from 'zustand'
 import { ChatImageAttachment, ChatSendPayload } from '../../shared/chat'
 import { AppUpdateState } from '../../shared/updater'
+import {
+  createInitialEventAutoRepairState,
+  EventAutoRepairState,
+} from '../../shared/event-repair'
 
 export interface MetricsState {
   cpu: {
@@ -46,6 +50,7 @@ export interface EventLogState {
   events: EventLogEntry[]
   error?: string
   hasSecurityLog: boolean
+  autoRepair: EventAutoRepairState
 }
 
 export interface WindowsUpdateState {
@@ -141,7 +146,11 @@ export const useAppStore = create<AppState>((set) => ({
     timestamp: 0,
   },
   processes: [],
-  eventLog: { events: [], hasSecurityLog: false },
+  eventLog: {
+    events: [],
+    hasSecurityLog: false,
+    autoRepair: createInitialEventAutoRepairState(),
+  },
   windowsUpdate: { count: -1, updates: [], checkedAt: 0, isChecking: true },
   setMetrics: (metrics) => set({ metrics }),
   setProcesses: (processes) => set({ processes }),

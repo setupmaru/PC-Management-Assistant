@@ -63,12 +63,14 @@ jobs:
           $releaseVersion = node -p "require('./package.json').releaseVersion"
           $sourceInstaller = "release/PC-Management-Assistant-$packageVersion-setup.exe"
           $targetInstaller = "release/PC-Management-Assistant-$releaseVersion-setup.exe"
-          Move-Item -LiteralPath $sourceInstaller -Destination $targetInstaller
-          Move-Item -LiteralPath "$sourceInstaller.blockmap" -Destination "$targetInstaller.blockmap"
-          $sourceName = Split-Path -Leaf $sourceInstaller
-          $targetName = Split-Path -Leaf $targetInstaller
-          (Get-Content 'release/latest.yml' -Raw).Replace($sourceName, $targetName) `
-            | Set-Content -Encoding utf8 'release/latest.yml'
+          if ($packageVersion -ne $releaseVersion) {
+            Move-Item -LiteralPath $sourceInstaller -Destination $targetInstaller
+            Move-Item -LiteralPath "$sourceInstaller.blockmap" -Destination "$targetInstaller.blockmap"
+            $sourceName = Split-Path -Leaf $sourceInstaller
+            $targetName = Split-Path -Leaf $targetInstaller
+            (Get-Content 'release/latest.yml' -Raw).Replace($sourceName, $targetName) `
+              | Set-Content -Encoding utf8 'release/latest.yml'
+          }
 
       - name: Verify Windows packages
         shell: pwsh
@@ -148,16 +150,18 @@ jobs:
           set -euo pipefail
           package_version=$(node -p "require('./package.json').version")
           release_version=$(node -p "require('./package.json').releaseVersion")
-          for arch in x64 arm64; do
-            for ext in dmg zip; do
-              mv \
-                "release/PC-Management-Assistant-$package_version-mac-$arch.$ext" \
-                "release/PC-Management-Assistant-$release_version-mac-$arch.$ext"
+          if [[ "$package_version" != "$release_version" ]]; then
+            for arch in x64 arm64; do
+              for ext in dmg zip; do
+                mv \
+                  "release/PC-Management-Assistant-$package_version-mac-$arch.$ext" \
+                  "release/PC-Management-Assistant-$release_version-mac-$arch.$ext"
+              done
             done
-          done
-          sed -i '' \
-            "s/PC-Management-Assistant-$package_version/PC-Management-Assistant-$release_version/g" \
-            release/latest-mac.yml
+            sed -i '' \
+              "s/PC-Management-Assistant-$package_version/PC-Management-Assistant-$release_version/g" \
+              release/latest-mac.yml
+          fi
 
       - name: Verify macOS packages and architectures
         shell: bash

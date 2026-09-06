@@ -66,7 +66,7 @@ export default function DashboardPanel() {
         {isWindows && (
           <div style={styles.section}>
             <div style={styles.sectionHeader}>
-              <span style={styles.sectionTitle}>EVENTS (24H)</span>
+              <span style={styles.sectionTitle}>EVENTS (24H) · AUTO REPAIR</span>
             </div>
             <AlertBanner />
           </div>
