@@ -77,6 +77,22 @@ CREATE TABLE IF NOT EXISTS chat_usage (
   PRIMARY KEY (user_id, date)
 );
 
+-- 로그인한 데스크톱 앱이 보내는 최소 장비 상태입니다.
+-- 프로세스 목록, 이벤트 로그, 파일명처럼 민감할 수 있는 데이터는 저장하지 않습니다.
+CREATE TABLE IF NOT EXISTS managed_devices (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  device_id    VARCHAR(128) UNIQUE NOT NULL,
+  name         VARCHAR(255) NOT NULL,
+  platform     VARCHAR(32) NOT NULL,
+  os_version   VARCHAR(255),
+  app_version  VARCHAR(32),
+  metrics      JSONB NOT NULL DEFAULT '{}'::jsonb,
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- 인덱스
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS idx_email_verification_codes_expires_at
@@ -89,3 +105,5 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_polar_customer_id
   ON users(polar_customer_id) WHERE polar_customer_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_provider_id
   ON subscriptions(provider, provider_subscription_id);
+CREATE INDEX IF NOT EXISTS idx_managed_devices_user_id ON managed_devices(user_id);
+CREATE INDEX IF NOT EXISTS idx_managed_devices_last_seen_at ON managed_devices(last_seen_at DESC);

@@ -6,8 +6,10 @@ import pool, { closePool } from './config/db'
 import { ALLOWED_ORIGINS, IS_PRODUCTION, NODE_ENV } from './config/env'
 import { HOST, PORT, PUBLIC_BASE_URL } from './config/app'
 import authRouter from './routes/auth'
+import adminRouter from './routes/admin'
 import billingRouter from './routes/billing'
 import chatRouter from './routes/chat'
+import devicesRouter from './routes/devices'
 import subscriptionRouter from './routes/subscription'
 import webhookRouter from './routes/webhook'
 import windowsUpdateRouter from './routes/windowsUpdate'
@@ -35,6 +37,8 @@ app.use('/api/chat', chatRouter)
 app.use(express.json({ limit: '1mb' }))
 
 app.use('/api/auth', authRouter)
+app.use('/api/admin', adminRouter)
+app.use('/api/devices', devicesRouter)
 app.use('/api/subscription', subscriptionRouter)
 app.use('/api/billing', billingRouter)
 app.use('/api/windows-update', windowsUpdateRouter)

@@ -122,6 +122,11 @@ const EMAIL_VERIFICATION_RESEND_SECONDS = readInteger('EMAIL_VERIFICATION_RESEND
 
 const OPENAI_API_KEY = readOptional('OPENAI_API_KEY') ?? ''
 const OPENAI_MODEL = readOptional('OPENAI_MODEL') ?? 'gpt-4o-mini'
+const BACKOFFICE_API_TOKEN = readOptional('BACKOFFICE_API_TOKEN') ?? ''
+
+if (BACKOFFICE_API_TOKEN && BACKOFFICE_API_TOKEN.length < 32) {
+  throw new Error('[env] BACKOFFICE_API_TOKEN must be at least 32 characters')
+}
 
 const ALLOWED_ORIGINS = (() => {
   const configured = parseOriginList(readOptional('ALLOWED_ORIGINS'))
@@ -134,6 +139,7 @@ const ALLOWED_ORIGINS = (() => {
 
 export {
   ALLOWED_ORIGINS,
+  BACKOFFICE_API_TOKEN,
   DATABASE_URL,
   EMAIL_FROM,
   EMAIL_VERIFICATION_RESEND_SECONDS,

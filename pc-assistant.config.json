@@ -1,11 +1,12 @@
 {
   "API_BASES": [
+    "https://pma-api.setupmaru.com/api",
     "http://api.setupmaru.com:3400/api",
     "http://192.168.0.117:3400/api",
     "http://localhost:3400/api"
   ],
-  "API_BASE": "http://api.setupmaru.com:3400/api",
-  "PUBLIC_BASE_URL": "http://api.setupmaru.com:3400",
+  "API_BASE": "https://pma-api.setupmaru.com/api",
+  "PUBLIC_BASE_URL": "https://pma-api.setupmaru.com",
   "LAN_API_BASE": "http://192.168.0.117:3400/api",
   "LOCAL_API_BASE": "http://localhost:3400/api"
 }

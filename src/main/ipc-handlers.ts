@@ -11,12 +11,13 @@ import {
   saveRefreshToken,
   loadRefreshToken,
   clearRefreshToken,
+  getDeviceId,
 } from './store'
 import { NetworkMonitorSettings } from '../shared/diagnostics'
 
 const LOCALHOST_FALLBACK_API_BASE = 'http://localhost:3400/api'
 const DEV_DEFAULT_API_BASE = LOCALHOST_FALLBACK_API_BASE
-const PACKAGED_DEFAULT_API_BASE = 'http://api.setupmaru.com:3400/api'
+const PACKAGED_DEFAULT_API_BASE = 'https://pma-api.setupmaru.com/api'
 const DEFAULT_LAN_API_BASE = 'http://192.168.0.117:3400/api'
 const REMOTE_API_REQUEST_TIMEOUT_MS = 12000
 const LOCAL_API_REQUEST_TIMEOUT_MS = 4000
@@ -26,6 +27,7 @@ const CONFIG_BASENAME = 'pc-assistant.config.json'
 const MAX_CHAT_ATTACHMENTS = 4
 const MAX_CHAT_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
 const MAX_CHAT_IMAGE_DATA_URL_LENGTH = 7 * 1024 * 1024
+const DEVICE_HEARTBEAT_INTERVAL_MS = 60_000
 
 interface ConflictCheckUpdate {
   title: string
@@ -335,6 +337,34 @@ async function authenticatedFetch(path: string, options: RequestInit = {}): Prom
   return res
 }
 
+async function syncManagedDevice(collector: DataCollectorService): Promise<void> {
+  if (!inMemoryAccessToken) return
+
+  const metrics = collector.getLastSnapshot().metrics
+  if (!metrics) return
+
+  try {
+    const response = await authenticatedFetch('/devices/heartbeat', {
+      method: 'POST',
+      body: JSON.stringify({
+        deviceId: getDeviceId(),
+        name: os.hostname(),
+        platform: process.platform,
+        osVersion: `${os.type()} ${os.release()}`,
+        appVersion: app.getVersion(),
+        metrics,
+      }),
+    })
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({})) as { error?: string }
+      console.error(`[devices] Sync failed (${response.status}): ${data.error ?? 'Unknown error'}`)
+    }
+  } catch (error) {
+    console.error('[devices] Sync failed:', error instanceof Error ? error.message : error)
+  }
+}
+
 function formatNetworkError(err: unknown): string {
   const base = (err && typeof err === 'object' && 'base' in err)
     ? String((err as { base: string }).base)
@@ -511,6 +541,9 @@ export function registerIpcHandlers(
   const conflictSessions = new Map<string, ConflictSession>()
 
   preflightApiHealthCheck().catch(() => {})
+  setInterval(() => {
+    void syncManagedDevice(collector)
+  }, DEVICE_HEARTBEAT_INTERVAL_MS).unref()
 
   ipcMain.handle('auth:login', async (_event, email: string, password: string) => {
     try {
@@ -538,6 +571,7 @@ export function registerIpcHandlers(
 
       inMemoryAccessToken = data.accessToken ?? null
       if (data.refreshToken) saveRefreshToken(data.refreshToken)
+      void syncManagedDevice(collector)
       return { success: true, user: data.user }
     } catch (err) {
       return { success: false, error: formatNetworkError(err) }
@@ -563,6 +597,7 @@ export function registerIpcHandlers(
 
       inMemoryAccessToken = data.accessToken ?? null
       if (data.refreshToken) saveRefreshToken(data.refreshToken)
+      void syncManagedDevice(collector)
       return {
         success: true,
         user: data.user,
@@ -594,6 +629,7 @@ export function registerIpcHandlers(
 
       inMemoryAccessToken = data.accessToken
       saveRefreshToken(data.refreshToken)
+      void syncManagedDevice(collector)
       return { success: true, user: data.user }
     } catch (err) {
       return { success: false, error: formatNetworkError(err) }
@@ -681,6 +717,7 @@ export function registerIpcHandlers(
       }
 
       inMemoryAccessToken = data.accessToken
+      void syncManagedDevice(collector)
       return { success: true, user: data.user }
     } catch {
       return { success: false }
@@ -866,6 +903,7 @@ export function registerIpcHandlers(
   ipcMain.handle('system:getSnapshot', async () => {
     try {
       const snapshot = await collector.getFreshSnapshot()
+      void syncManagedDevice(collector)
       return { success: true, data: snapshot }
     } catch (err) {
       return { success: false, error: String(err) }

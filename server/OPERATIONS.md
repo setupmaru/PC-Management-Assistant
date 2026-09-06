@@ -3,14 +3,15 @@
 ## Production environment
 - Copy `server/.env.example` to `server/.env`.
 - Set `NODE_ENV=production`.
-- Set `PUBLIC_BASE_URL=http://api.setupmaru.com:3400`.
-- Set `ALLOWED_ORIGINS=http://api.setupmaru.com:3400`.
+- Set `PUBLIC_BASE_URL=https://pma-api.setupmaru.com`.
+- Set `ALLOWED_ORIGINS=https://pma-api.setupmaru.com`.
+- Generate `BACKOFFICE_API_TOKEN` with at least 32 random characters and set the same value in the backoffice secret.
 - Fill in `DATABASE_URL`, `JWT_ACCESS_SECRET`, and `JWT_REFRESH_SECRET`.
 - Set `OPENAI_API_KEY` on the server. Optionally set `OPENAI_MODEL` (defaults to `gpt-4o-mini`).
 - Complete the Stripe Connect payout setup in the Polar dashboard.
 - Create monthly Plus (KRW 4,900) and Pro (KRW 15,000) products in Polar, then set
   both product IDs. Configure either an API access token or both Checkout Link URLs.
-- Register `http://api.setupmaru.com:3400/api/polar/webhook` as a Polar webhook endpoint,
+- Register `https://pma-api.setupmaru.com/api/polar/webhook` as a Polar webhook endpoint,
   subscribe to the subscription events listed below, and set `POLAR_WEBHOOK_SECRET`.
 - Enable 2-Step Verification on the Gmail sender account, create a Google App Password, and set
   `GMAIL_USER`, `GMAIL_APP_PASSWORD`, and `EMAIL_FROM`. Do not use the normal Gmail password.
@@ -73,7 +74,7 @@ POLAR_PRO_CHECKOUT_URL=https://buy.polar.sh/polar_cl_...
 Webhook URL:
 
 ```text
-http://api.setupmaru.com:3400/api/polar/webhook
+https://pma-api.setupmaru.com/api/polar/webhook
 ```
 
 Subscribe to `subscription.created`, `subscription.updated`, `subscription.active`,

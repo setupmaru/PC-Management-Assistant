@@ -1,10 +1,12 @@
 import Store from 'electron-store'
 import { safeStorage } from 'electron'
+import { randomUUID } from 'crypto'
 
 interface StoreSchema {
   // Removed from current builds; retained only so upgrades can delete it.
   encryptedApiKey?: string
   encryptedRefreshToken?: string
+  deviceId?: string
   windowBounds?: { x: number; y: number; width: number; height: number }
   theme?: 'dark' | 'light'
   eventAutoRepairEnabled?: boolean
@@ -69,6 +71,18 @@ export function loadRefreshToken(): string | null {
 
 export function clearRefreshToken(): void {
   getStore().delete('encryptedRefreshToken')
+}
+
+// 설치별 장비 식별자입니다. 계정을 바꿔도 같은 PC가 중복 등록되지 않도록 유지합니다.
+export function getDeviceId(): string {
+  const stored = getStore().get('deviceId')
+  if (typeof stored === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(stored)) {
+    return stored
+  }
+
+  const deviceId = randomUUID()
+  getStore().set('deviceId', deviceId)
+  return deviceId
 }
 
 // ── Event auto repair ─────────────────────────────────
