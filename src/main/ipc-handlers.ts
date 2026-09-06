@@ -17,7 +17,7 @@ import { NetworkMonitorSettings } from '../shared/diagnostics'
 
 const LOCALHOST_FALLBACK_API_BASE = 'http://localhost:3400/api'
 const DEV_DEFAULT_API_BASE = LOCALHOST_FALLBACK_API_BASE
-const PACKAGED_DEFAULT_API_BASE = 'https://pma-api.setupmaru.com/api'
+const PACKAGED_DEFAULT_API_BASE = 'https://donas811.synology.me:3443/api'
 const DEFAULT_LAN_API_BASE = 'http://192.168.0.117:3400/api'
 const REMOTE_API_REQUEST_TIMEOUT_MS = 12000
 const LOCAL_API_REQUEST_TIMEOUT_MS = 4000
