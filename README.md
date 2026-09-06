@@ -45,47 +45,6 @@
 
 PowerShell과 Windows 관리 인터페이스가 필요한 기능은 Windows에서만 표시됩니다.
 
-## 기술 구성
-
-- Electron, React 19, TypeScript, Vite
-- Zustand, Chart.js, systeminformation
-- Node.js, Express, PostgreSQL
-- OpenAI API, Polar, Gmail SMTP
-
-## 로컬 개발
-
-Node.js 24와 npm이 필요합니다.
-
-```bash
-git clone https://github.com/setupmaru/PC-Management-Assistant.git
-cd PC-Management-Assistant
-npm ci
-npm run dev
-```
-
-프로덕션 렌더러·메인 프로세스 빌드:
-
-```bash
-npm run build
-```
-
-운영체제별 패키징은 해당 운영체제에서 실행하는 것을 권장합니다.
-
-```bash
-npm run dist:win
-npm run dist:mac
-```
-
-## 릴리스
-
-`v*` 태그를 푸시하면 GitHub Actions가 다음 파일을 빌드·검증한 뒤 하나의 Latest 릴리스로 게시합니다.
-
-- Windows x64 설치 프로그램 및 포터블 ZIP
-- Intel Mac용 DMG·ZIP
-- Apple Silicon Mac용 DMG·ZIP
-
-버전별 변경사항은 [`release-notes/`](release-notes)에서 확인할 수 있습니다.
-
 ## 라이선스
 
 이 프로젝트의 패키지 메타데이터에는 MIT 라이선스가 적용되어 있습니다.
