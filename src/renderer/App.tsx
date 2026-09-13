@@ -225,6 +225,7 @@ export default function App() {
       {/* 설정 모달 (authenticated 전용) */}
       {authStatus === 'authenticated' && showSettings && (
         <SettingsModal
+          accountId={currentUser?.id ?? ''}
           onClose={() => setShowSettings(false)}
           onLogout={handleLogout}
         />

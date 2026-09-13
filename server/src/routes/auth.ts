@@ -12,7 +12,27 @@ import {
   verifyEmail,
 } from '../services/auth.service'
 
+import { AccountSettingsError, getAccountSettings, updateAccountSettings } from '../services/account-settings.service'
+
 const router = Router()
+router.get('/settings', requireAuth, async (req: Request, res: Response) => {
+  try {
+    res.json(await getAccountSettings(req.user!.id))
+  } catch (error) {
+    res.status(error instanceof AccountSettingsError ? error.status : 500).json({
+      error: error instanceof AccountSettingsError ? error.message : '설정을 불러오지 못했습니다.',
+    })
+  }
+})
+router.patch('/settings', requireAuth, async (req: Request, res: Response) => {
+  try {
+    res.json(await updateAccountSettings(req.user!.id, req.body?.chatModel))
+  } catch (error) {
+    res.status(error instanceof AccountSettingsError ? error.status : 500).json({
+      error: error instanceof AccountSettingsError ? error.message : '설정을 저장하지 못했습니다.',
+    })
+  }
+})
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function normalizeEmail(value: unknown): string {

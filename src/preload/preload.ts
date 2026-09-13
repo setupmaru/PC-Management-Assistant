@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { AccountSettingsResult, ChatModel } from '../shared/account-settings'
 import { ChatSendPayload } from '../shared/chat'
 import { AppUpdateState } from '../shared/updater'
 import { EventAutoRepairState } from '../shared/event-repair'
@@ -178,6 +179,11 @@ const api = {
       ipcRenderer.invoke('auth:logout') as Promise<{ success: boolean }>,
     getConnectionInfo: () =>
       ipcRenderer.invoke('auth:getConnectionInfo') as Promise<AuthConnectionInfo>,
+  },
+
+  accountSettings: {
+    get: () => ipcRenderer.invoke('accountSettings:get') as Promise<AccountSettingsResult>,
+    update: (chatModel: ChatModel) => ipcRenderer.invoke('accountSettings:update', chatModel) as Promise<AccountSettingsResult>,
   },
 
   subscription: {

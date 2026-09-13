@@ -7,7 +7,7 @@
 - Set `ALLOWED_ORIGINS=https://pma-api.setupmaru.com`.
 - Generate `BACKOFFICE_API_TOKEN` with at least 32 random characters and set the same value in the backoffice secret.
 - Fill in `DATABASE_URL`, `JWT_ACCESS_SECRET`, and `JWT_REFRESH_SECRET`.
-- Set `OPENAI_API_KEY` on the server. Optionally set `OPENAI_MODEL` (defaults to `gpt-4o-mini`).
+- Set `OPENAI_API_KEY` on the server. `OPENAI_MODEL` is deprecated and ignored by account chat.
 - Complete the Stripe Connect payout setup in the Polar dashboard.
 - Create monthly Plus (KRW 4,900) and Pro (KRW 15,000) products in Polar, then set
   both product IDs. Configure either an API access token or both Checkout Link URLs.
@@ -53,6 +53,28 @@ Minimal option:
 
 The OpenAI key must exist only in `server/.env` or the server process environment. Do not
 put it in the desktop app `.env`, Vite defines, packaged resources, or user settings.
+
+## Account chat models (V1.0.17)
+
+Apply `schema.sql` before restarting the API, then publish desktop tag `v1.0.17`.
+The migration adds `users.chat_model` with default `gpt-5.4-mini` and an exact-model CHECK.
+It is additive and repeatable. Rollback can leave this column in place.
+
+Authenticated `GET /api/auth/settings` returns `{ chatModel, models: [{ id, label }] }`.
+`PATCH /api/auth/settings` accepts `{ chatModel }`; identity comes only from the verified
+user ID and the current database email, never from request body or token email.
+All accounts may select `gpt-4o-mini`, `gpt-5.4-mini`, or `gpt-5.5`.
+Only the literal database email `setupmaru@setupmaru.com` may select `gpt-6-astra`.
+The former `setupmaru@setupmaru` exception is removed. No account is auto-routed to Astra.
+Unauthorized stored choices fall back to balanced; missing accounts fail closed before quota use.
+Model selection is reread for every chat. Free/Plus/Pro restrictions are unchanged.
+`OPENAI_MODEL` is deprecated and cannot override this policy.
+
+Local checks (no production credentials): `npm test`, `npm run build`, and
+`PG_TEST_BINDIR=/path/to/postgresql/bin npm run test:schema` in `server`.
+The schema test creates/stops/removes its own isolated cluster on a temporary Unix socket.
+Before release, separately verify actual upstream availability for all four models using
+an authorized test account; test doubles only verify request parameters and policy.
 
 ## Polar payments
 

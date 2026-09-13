@@ -21,6 +21,16 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ DEFAULT
 ALTER TABLE users ALTER COLUMN email_verified_at DROP DEFAULT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS polar_customer_id VARCHAR(255);
 
+-- Account model preference: additive and safe to apply repeatedly.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS chat_model VARCHAR(32) NOT NULL DEFAULT 'gpt-5.4-mini';
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'users'::regclass AND conname = 'users_chat_model_check') THEN
+    ALTER TABLE users ADD CONSTRAINT users_chat_model_check
+      CHECK (chat_model IN ('gpt-4o-mini', 'gpt-5.4-mini', 'gpt-5.5', 'gpt-6-astra'));
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS subscriptions (
   id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id                UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

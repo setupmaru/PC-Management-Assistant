@@ -11,6 +11,8 @@ import {
   getSubscriptionStatus,
 } from '../services/subscription.service'
 
+import { AccountSettingsError, getAccountSettings } from '../services/account-settings.service'
+
 const router = Router()
 const MAX_SYSTEM_PROMPT_LENGTH = 100_000
 const MAX_MESSAGES = 40
@@ -99,6 +101,7 @@ router.post(
     }
 
     try {
+      const { chatModel } = await getAccountSettings(req.user!.id)
       const status = await getSubscriptionStatus(req.user!.id)
       let remaining = -1
 
@@ -115,9 +118,13 @@ router.post(
         remaining = allowance.remaining
       }
 
-      const text = await createChatCompletion(systemPrompt, messages)
+      const text = await createChatCompletion(systemPrompt, messages, chatModel)
       res.json({ text, remaining })
     } catch (error) {
+      if (error instanceof AccountSettingsError) {
+        res.status(error.status).json({ error: error.message })
+        return
+      }
       const message = error instanceof Error ? error.message : String(error)
       console.error('[chat] OpenAI completion failed:', message)
       res.status(502).json({ error: 'AI 응답을 생성하지 못했습니다. 잠시 후 다시 시도해주세요.' })

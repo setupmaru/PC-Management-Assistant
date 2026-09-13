@@ -1,4 +1,5 @@
-import { OPENAI_API_KEY, OPENAI_MODEL } from '../config/env'
+import { OPENAI_API_KEY } from '../config/env'
+import type { ChatModel } from './account-settings.service'
 
 export type OpenAIChatContentPart =
   | { type: 'text'; text: string }
@@ -18,11 +19,13 @@ export function isOpenAIConfigured(): boolean {
 
 export async function createChatCompletion(
   systemPrompt: string,
-  messages: OpenAIChatMessage[]
+  messages: OpenAIChatMessage[],
+  model: ChatModel
 ): Promise<string> {
   if (!isOpenAIConfigured()) {
     throw new Error('OPENAI_NOT_CONFIGURED')
   }
+
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), OPENAI_REQUEST_TIMEOUT_MS)
@@ -35,8 +38,10 @@ export async function createChatCompletion(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: OPENAI_MODEL,
-        max_tokens: 2048,
+        model,
+        ...(model === 'gpt-4o-mini'
+          ? { max_tokens: 2048 }
+          : { max_completion_tokens: 2048, reasoning_effort: 'low' }),
         messages: [
           { role: 'system', content: systemPrompt },
           ...messages,

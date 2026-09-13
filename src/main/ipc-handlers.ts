@@ -1,5 +1,6 @@
 ﻿import { ipcMain, BrowserWindow, app, dialog } from 'electron'
 import fs from 'fs'
+import { registerAccountSettingsIpc } from './account-settings-ipc'
 import { net } from 'electron'
 import os from 'os'
 import path from 'path'
@@ -67,7 +68,19 @@ const CONFLICT_SESSION_TTL_MS = 10 * 60 * 1000
 const AUDIO_INTERFACE_QUESTION = '무슨 오디오 인터페이스를 쓰시나요?'
 
 let inMemoryAccessToken: string | null = null
+let sessionGeneration = 0
 let lastReachableApiBase: string | null = null
+
+function assertCurrentSession(generation: number): void {
+  if (generation !== sessionGeneration) throw new Error('세션이 변경되었습니다. 다시 시도해주세요.')
+}
+
+function invalidateSession(): number {
+  sessionGeneration++
+  inMemoryAccessToken = null
+  clearRefreshToken()
+  return sessionGeneration
+}
 
 function normalizeBase(base: string): string {
   return base.trim().replace(/\/+$/, '')
@@ -300,6 +313,7 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
 }
 
 async function authenticatedFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const generation = sessionGeneration
   const makeReq = (token: string) =>
     apiFetch(path, {
       ...options,
@@ -313,6 +327,7 @@ async function authenticatedFetch(path: string, options: RequestInit = {}): Prom
   if (!inMemoryAccessToken) throw new Error('로그인이 필요합니다.')
 
   let res = await makeReq(inMemoryAccessToken)
+  assertCurrentSession(generation)
   if (res.status === 401) {
     const refreshToken = loadRefreshToken()
     if (!refreshToken) throw new Error('로그인이 필요합니다.')
@@ -323,15 +338,17 @@ async function authenticatedFetch(path: string, options: RequestInit = {}): Prom
       body: JSON.stringify({ refreshToken }),
     })
 
+    assertCurrentSession(generation)
     if (!refreshRes.ok) {
-      inMemoryAccessToken = null
-      clearRefreshToken()
+      invalidateSession()
       throw new Error('세션이 만료되었습니다. 다시 로그인해주세요.')
     }
 
     const data = (await refreshRes.json()) as { accessToken: string }
+    assertCurrentSession(generation)
     inMemoryAccessToken = data.accessToken
     res = await makeReq(inMemoryAccessToken)
+    assertCurrentSession(generation)
   }
 
   return res
@@ -538,6 +555,7 @@ export function registerIpcHandlers(
   collector: DataCollectorService,
   claude: ClaudeService,
 ): void {
+  registerAccountSettingsIpc(ipcMain, authenticatedFetch)
   const conflictSessions = new Map<string, ConflictSession>()
 
   preflightApiHealthCheck().catch(() => {})
@@ -546,6 +564,7 @@ export function registerIpcHandlers(
   }, DEVICE_HEARTBEAT_INTERVAL_MS).unref()
 
   ipcMain.handle('auth:login', async (_event, email: string, password: string) => {
+    const generation = invalidateSession()
     try {
       const res = await apiFetch('/auth/login', {
         method: 'POST',
@@ -560,6 +579,7 @@ export function registerIpcHandlers(
         code?: string
         verificationRequired?: boolean
       }
+      assertCurrentSession(generation)
       if (!res.ok) {
         return {
           success: false,
@@ -579,6 +599,7 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('auth:register', async (_event, email: string, password: string) => {
+    const generation = invalidateSession()
     try {
       const res = await apiFetch('/auth/register', {
         method: 'POST',
@@ -593,6 +614,7 @@ export function registerIpcHandlers(
         verificationRequired?: boolean
         message?: string
       }
+      assertCurrentSession(generation)
       if (!res.ok) return { success: false, error: data.error ?? '회원가입 실패' }
 
       inMemoryAccessToken = data.accessToken ?? null
@@ -611,6 +633,7 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('auth:verifyEmail', async (_event, email: string, code: string) => {
+    const generation = invalidateSession()
     try {
       const res = await apiFetch('/auth/verify-email', {
         method: 'POST',
@@ -623,6 +646,7 @@ export function registerIpcHandlers(
         user?: { id: string; email: string; plan: string }
         error?: string
       }
+      assertCurrentSession(generation)
       if (!res.ok || !data.accessToken || !data.refreshToken || !data.user) {
         return { success: false, error: data.error ?? '이메일 인증 실패' }
       }
@@ -696,6 +720,7 @@ export function registerIpcHandlers(
   )
 
   ipcMain.handle('auth:refreshToken', async () => {
+    const generation = sessionGeneration
     try {
       const refreshToken = loadRefreshToken()
       if (!refreshToken) return { success: false }
@@ -710,9 +735,9 @@ export function registerIpcHandlers(
         user?: { id: string; email: string; plan: string }
       }
 
+      assertCurrentSession(generation)
       if (!res.ok || !data.accessToken) {
-        clearRefreshToken()
-        inMemoryAccessToken = null
+        invalidateSession()
         return { success: false }
       }
 
@@ -740,21 +765,19 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('auth:logout', async () => {
-    try {
-      const refreshToken = loadRefreshToken()
-      if (inMemoryAccessToken && refreshToken) {
-        await apiFetch('/auth/logout', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${inMemoryAccessToken}`,
-          },
-          body: JSON.stringify({ refreshToken }),
-        }).catch(() => {})
-      }
-    } finally {
-      inMemoryAccessToken = null
-      clearRefreshToken()
+    const accessToken = inMemoryAccessToken
+    const refreshToken = loadRefreshToken()
+    // Invalidate before awaiting the server; a late logout must not clear a new login.
+    invalidateSession()
+    if (accessToken && refreshToken) {
+      await apiFetch('/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ refreshToken }),
+      }).catch(() => {})
     }
     return { success: true }
   })
