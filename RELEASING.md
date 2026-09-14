@@ -2,6 +2,21 @@
 
 GitHub Actions builds and publishes the Windows and macOS packages whenever a `v*` tag is pushed.
 
+Before tagging, run `npm test`, `npm run build`, and the production renderer smoke test:
+
+```bash
+# Keep browser tooling outside the application's dependency tree.
+npm install --prefix /tmp/pcma-browser-tools --no-audit --no-fund playwright
+node /tmp/pcma-browser-tools/node_modules/playwright/cli.js install chromium
+NODE_PATH=/tmp/pcma-browser-tools/node_modules node test/production-mount.smoke.cjs
+```
+
+The smoke test serves the actual `dist` bundle to headless Chromium and checks visible login and
+Mac-style authenticated dashboard UI with minimal Electron preload stubs. It fails on blank roots,
+runtime/console errors, or failed requests, and saves screenshots, HTML, and `report.json` under
+`/tmp/pcma-production-smoke` (override with `SMOKE_ARTIFACTS`). It does not validate packaged
+Electron IPC, Windows-only diagnostics, real authentication, or automatic updates.
+
 1. Update `package.json`'s internal SemVer `version` and public `releaseVersion`, then commit the change.
 2. Create an annotated tag matching `releaseVersion` exactly.
 3. Push the commit and tag.
