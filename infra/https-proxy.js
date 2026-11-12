@@ -1,3 +1,5 @@
+// Legacy Windows proxy for api.setupmaru.com. The new API hostname uses nginx;
+// see server/OPERATIONS.md for its DNS, certificate, and proxy configuration.
 const fs = require('fs')
 const https = require('https')
 const http = require('http')

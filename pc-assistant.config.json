@@ -1,12 +1,11 @@
 {
   "API_BASES": [
-    "https://donas811.synology.me:3443/api",
-    "https://pma-api.setupmaru.com/api",
+    "https://api.pc-management-assistant.setupmaru.com/api",
     "http://192.168.0.119:3400/api",
     "http://localhost:3400/api"
   ],
-  "API_BASE": "https://donas811.synology.me:3443/api",
-  "PUBLIC_BASE_URL": "https://donas811.synology.me:3443",
+  "API_BASE": "https://api.pc-management-assistant.setupmaru.com/api",
+  "PUBLIC_BASE_URL": "https://api.pc-management-assistant.setupmaru.com",
   "LAN_API_BASE": "http://192.168.0.119:3400/api",
   "LOCAL_API_BASE": "http://localhost:3400/api"
 }

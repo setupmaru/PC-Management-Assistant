@@ -18,7 +18,8 @@ import { NetworkMonitorSettings } from '../shared/diagnostics'
 
 const LOCALHOST_FALLBACK_API_BASE = 'http://localhost:3400/api'
 const DEV_DEFAULT_API_BASE = LOCALHOST_FALLBACK_API_BASE
-const PACKAGED_DEFAULT_API_BASE = 'https://donas811.synology.me:3443/api'
+const PACKAGED_DEFAULT_API_BASE = 'https://api.pc-management-assistant.setupmaru.com/api'
+const RETIRED_API_HOSTS = new Set(['donas811.synology.me', 'pma-api.setupmaru.com'])
 const DEFAULT_LAN_API_BASE = 'http://192.168.0.119:3400/api'
 const REMOTE_API_REQUEST_TIMEOUT_MS = 12000
 const LOCAL_API_REQUEST_TIMEOUT_MS = 4000
@@ -104,6 +105,13 @@ function collectApiBases(value: unknown): string[] {
     .split(/[\r\n,;]+/)
     .map((item) => ensureApiBase(item))
     .filter(Boolean)
+    .filter((base) => {
+      try {
+        return !RETIRED_API_HOSTS.has(new URL(base).hostname)
+      } catch {
+        return true
+      }
+    })
 }
 
 function dedupeBases(bases: string[]): string[] {
@@ -243,8 +251,9 @@ function getApiBaseCandidates(): string[] {
   ])
 
   return dedupeBases([
-    ...localCandidateBases,
     lastReachableApiBase ?? '',
+    ...(app.isPackaged ? [...remoteEnvBases, ...remoteConfigBases, getDefaultApiBase()] : []),
+    ...localCandidateBases,
     ...remoteEnvBases,
     ...remoteConfigBases,
     getDefaultApiBase(),
