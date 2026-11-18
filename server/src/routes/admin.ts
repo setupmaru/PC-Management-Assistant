@@ -87,4 +87,44 @@ router.get('/managed-pcs', requireBackofficeToken, async (_req: Request, res: Re
   }
 })
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+router.delete('/managed-pcs/:id', requireBackofficeToken, async (req: Request, res: Response) => {
+  const { id } = req.params
+
+  if (!UUID_PATTERN.test(id)) {
+    res.status(400).json({ status: 'error', error: '올바르지 않은 장비 ID입니다.' })
+    return
+  }
+
+  try {
+    const result = await pool.query<{ id: string; device_id: string }>(
+      `DELETE FROM managed_devices
+        WHERE id = $1
+        RETURNING id, device_id`,
+      [id]
+    )
+
+    if (result.rowCount === 0) {
+      res.status(404).json({ status: 'error', error: '장비를 찾을 수 없습니다.' })
+      return
+    }
+
+    const deleted = result.rows[0]
+    console.info(`[admin] Managed PC deleted: id=${deleted.id} deviceId=${deleted.device_id}`)
+    res.json({
+      status: 'ok',
+      deleted: { id: deleted.id, deviceId: deleted.device_id },
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error('[admin] Managed PC delete failed:', error)
+    res.status(503).json({
+      status: 'error',
+      error: 'PC를 삭제하지 못했습니다.',
+      timestamp: new Date().toISOString(),
+    })
+  }
+})
+
 export default router
