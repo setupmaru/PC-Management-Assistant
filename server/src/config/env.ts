@@ -115,7 +115,14 @@ const POLAR_ENVIRONMENT = normalizePolarEnvironment(process.env.POLAR_ENVIRONMEN
 
 const GMAIL_USER = readOptional('GMAIL_USER') ?? ''
 const GMAIL_APP_PASSWORD = readOptional('GMAIL_APP_PASSWORD') ?? ''
-const EMAIL_FROM = readOptional('EMAIL_FROM') ?? GMAIL_USER
+const SMTP_HOST = readOptional('SMTP_HOST') ?? ''
+const SMTP_PORT = readInteger('SMTP_PORT', 587)
+const SMTP_SECURE = (readOptional('SMTP_SECURE') ?? '').toLowerCase() === 'true'
+const SMTP_USER = readOptional('SMTP_USER') ?? ''
+const SMTP_PASSWORD = readOptional('SMTP_PASSWORD') ?? ''
+const SMTP_TLS_REJECT_UNAUTHORIZED =
+  (readOptional('SMTP_TLS_REJECT_UNAUTHORIZED') ?? 'true').toLowerCase() !== 'false'
+const EMAIL_FROM = readOptional('EMAIL_FROM') ?? (SMTP_HOST ? SMTP_USER : GMAIL_USER)
 const EMAIL_VERIFICATION_SECRET = readOptional('EMAIL_VERIFICATION_SECRET') ?? JWT_ACCESS_SECRET
 const EMAIL_VERIFICATION_TTL_MINUTES = readInteger('EMAIL_VERIFICATION_TTL_MINUTES', 10)
 const EMAIL_VERIFICATION_RESEND_SECONDS = readInteger('EMAIL_VERIFICATION_RESEND_SECONDS', 60)
@@ -152,6 +159,12 @@ export {
   JWT_ACCESS_SECRET,
   JWT_REFRESH_SECRET,
   NODE_ENV,
+  SMTP_HOST,
+  SMTP_PASSWORD,
+  SMTP_PORT,
+  SMTP_SECURE,
+  SMTP_TLS_REJECT_UNAUTHORIZED,
+  SMTP_USER,
   OPENAI_API_KEY,
   OPENAI_MODEL,
   POLAR_ACCESS_TOKEN,
