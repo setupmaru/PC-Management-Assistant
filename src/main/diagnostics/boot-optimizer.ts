@@ -5,6 +5,7 @@ import path from 'path'
 import { runPowerShell } from '../utils/powershell'
 import {
   BootHistoryEntry,
+  BootLogStatus,
   BootOptimizationChange,
   BootOptimizationSnapshot,
   StartupItem,
@@ -38,6 +39,8 @@ interface RawDegradation {
 }
 
 interface RawBootCollection {
+  BootLogStatus?: BootLogStatus
+  BootLogError?: string
   BootEvents?: RawBootEvent[] | RawBootEvent
   StartupItems?: RawStartupItem[] | RawStartupItem
   Degradations?: RawDegradation[] | RawDegradation
@@ -67,6 +70,7 @@ function psLiteral(value: string): string {
 }
 
 function finiteMilliseconds(value: unknown): number | null {
+  if (value == null || (typeof value === 'string' && !value.trim())) return null
   const number = Number(value)
   return Number.isFinite(number) && number >= 0 ? number : null
 }
@@ -101,7 +105,7 @@ export class BootOptimizerService {
   private changes: StoredChange[] = []
   private restorePointAutoCreate = true
   private restorePointCreatedThisSession = false
-  private refreshing = false
+  private refreshPromise: Promise<BootOptimizationSnapshot> | null = null
   private dataFile = ''
   private onUpdate: ((snapshot: BootOptimizationSnapshot) => void) | null = null
 
@@ -116,9 +120,14 @@ export class BootOptimizerService {
     return this.snapshot
   }
 
-  async refresh(): Promise<BootOptimizationSnapshot> {
-    if (this.refreshing && this.snapshot) return this.snapshot
-    this.refreshing = true
+  refresh(): Promise<BootOptimizationSnapshot> {
+    if (!this.refreshPromise) {
+      this.refreshPromise = this.collectSnapshot().finally(() => { this.refreshPromise = null })
+    }
+    return this.refreshPromise
+  }
+
+  private async collectSnapshot(): Promise<BootOptimizationSnapshot> {
     try {
       const raw = await this.collect()
       const bootHistory = this.parseBootHistory(asArray(raw.BootEvents))
@@ -137,6 +146,8 @@ export class BootOptimizerService {
 
       this.snapshot = {
         checkedAt: Date.now(),
+        bootLogStatus: raw.BootLogStatus ?? (latestBoot ? 'ready' : 'no-data'),
+        bootLogError: raw.BootLogError || undefined,
         latestBoot,
         averageBootSeconds,
         improvementSeconds,
@@ -147,8 +158,17 @@ export class BootOptimizerService {
       }
       this.onUpdate?.(this.snapshot)
       return this.snapshot
-    } finally {
-      this.refreshing = false
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.snapshot = {
+        checkedAt: Date.now(), latestBoot: null, averageBootSeconds: null,
+        improvementSeconds: null, bootHistory: [], startupItems: [],
+        ...this.snapshot,
+        bootLogStatus: 'error', collectionError: `부팅 정보 수집에 실패했습니다. 다시 시도해주세요. (${message})`,
+        changes: this.publicChanges(), restorePointAutoCreate: this.restorePointAutoCreate,
+      }
+      this.onUpdate?.(this.snapshot)
+      return this.snapshot
     }
   }
 
@@ -233,6 +253,7 @@ Checkpoint-Computer -Description ${psLiteral(description)} -RestorePointType 'MO
     const lines = [
       '# PC Management Assistant 부팅 최적화 리포트',
       '',
+      `- 수집 상태: ${snapshot?.collectionError || snapshot?.bootLogError || snapshot?.bootLogStatus || '수집 전'}`,
       `- 생성 시각: ${new Date().toLocaleString('ko-KR')}`,
       `- 최근 부팅: ${snapshot?.latestBoot ? `${snapshot.latestBoot.totalSeconds.toFixed(1)}초` : '측정 기록 없음'}`,
       `- 로그인까지: ${snapshot?.latestBoot ? `${snapshot.latestBoot.loginSeconds.toFixed(1)}초` : '-'}`,
@@ -342,8 +363,29 @@ function Get-EventFields($event) {
 }
 
 $logName = 'Microsoft-Windows-Diagnostics-Performance/Operational'
+$script:bootLogStatus = 'ready'
+$script:bootLogError = ''
+function Set-BootLogError($record) {
+  if ($record.Exception -is [System.UnauthorizedAccessException] -or $record.CategoryInfo.Category -eq 'PermissionDenied') {
+    $script:bootLogStatus = 'access-denied'
+  } else {
+    $script:bootLogStatus = 'error'
+  }
+  $script:bootLogError = $record.Exception.Message
+}
+try {
+  $log = Get-WinEvent -ListLog $logName -ErrorAction Stop
+  if (-not $log.IsEnabled) { $script:bootLogStatus = 'disabled' }
+} catch { Set-BootLogError $_ }
+function Read-BootEvents($ids, $limit) {
+  try {
+    Get-WinEvent -FilterHashtable @{ LogName = $logName; Id = $ids } -MaxEvents $limit -ErrorAction Stop
+  } catch {
+    if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*') { Set-BootLogError $_ }
+  }
+}
 $bootEvents = @(
-  Get-WinEvent -FilterHashtable @{ LogName = $logName; Id = 100 } -MaxEvents 12 |
+  Read-BootEvents @(100) 12 |
     ForEach-Object {
       $f = Get-EventFields $_
       [PSCustomObject]@{
@@ -356,7 +398,7 @@ $bootEvents = @(
 )
 
 $degradations = @(
-  Get-WinEvent -FilterHashtable @{ LogName = $logName; Id = 101,102,103,106,107,108,109,110 } -MaxEvents 200 |
+  Read-BootEvents @(101,102,103,106,107,108,109,110) 200 |
     ForEach-Object {
       $f = Get-EventFields $_
       [PSCustomObject]@{
@@ -450,6 +492,8 @@ Get-CimInstance Win32_Service | Where-Object { $_.StartMode -eq 'Auto' } | ForEa
 }
 
 [PSCustomObject]@{
+  BootLogStatus = if ($script:bootLogStatus -eq 'ready' -and $bootEvents.Count -eq 0) { 'no-data' } else { $script:bootLogStatus }
+  BootLogError = $script:bootLogError
   BootEvents = @($bootEvents)
   StartupItems = @($items)
   Degradations = @($degradations)

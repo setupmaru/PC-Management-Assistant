@@ -17,17 +17,57 @@ const TYPE_LABEL: Record<StartupItemType, string> = {
   service: '서비스',
 }
 
+function measurementMessage(snapshot: BootOptimizationSnapshot | null): string {
+  if (!snapshot) return '부팅 정보를 불러오지 못했습니다. 다시 시도해주세요.'
+  if (snapshot.collectionError) return snapshot.collectionError
+  if (snapshot.bootLogStatus === 'access-denied') return '부팅 성능 로그에 접근할 권한이 없습니다. 앱을 관리자 권한으로 실행한 뒤 새로 고침해주세요.'
+  if (snapshot.bootLogStatus === 'disabled') return '부팅 성능 로그가 꺼져 있습니다. 이벤트 뷰어의 Diagnostics-Performance > Operational 로그를 켜고 Windows를 다시 시작해주세요.'
+  if (snapshot.bootLogStatus === 'error') return `부팅 성능 로그 조회에 실패했습니다. ${snapshot.bootLogError ?? '새로 고침 후 다시 시도해주세요.'}`
+  if (!snapshot.latestBoot) return 'Windows 부팅 성능 기록이 없습니다. Windows를 다시 시작한 뒤 새로 고침해주세요.'
+  return '시작 항목과 연결된 실측 지연 기록이 없습니다. 전체 항목은 상세 · 관리에서 확인할 수 있습니다.'
+}
+
 export default function BootOptimizationCard() {
   const [snapshot, setSnapshot] = useState<BootOptimizationSnapshot | null>(null)
   const [showDetail, setShowDetail] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    window.api.diagnostics.getBootOptimization().then((result) => {
-      if (result.success && result.data) setSnapshot(result.data)
-    }).catch(() => {})
-    const unsubscribe = window.api.diagnostics.onBootUpdate(setSnapshot)
-    return () => { unsubscribe() }
+    let active = true
+    let receivedUpdate = false
+    const unsubscribe = window.api.diagnostics.onBootUpdate((data) => {
+      receivedUpdate = true
+      if (active) { setSnapshot(data); setError(''); setLoading(false) }
+    })
+    void (async () => {
+      try {
+        let result = await window.api.diagnostics.getBootOptimization()
+        if (!active || receivedUpdate) return
+        if (result.success && !result.data) result = await window.api.diagnostics.refreshBootOptimization()
+        if (!active || receivedUpdate) return
+        if (result.success && result.data) setSnapshot(result.data)
+        else setError(result.error ?? '부팅 정보를 불러오지 못했습니다.')
+      } catch (reason) {
+        if (active && !receivedUpdate) setError(reason instanceof Error ? reason.message : String(reason))
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+    return () => { active = false; unsubscribe() }
   }, [])
+
+  const refresh = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const result = await window.api.diagnostics.refreshBootOptimization()
+      if (result.success && result.data) setSnapshot(result.data)
+      else setError(result.error ?? '부팅 정보를 불러오지 못했습니다.')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally { setLoading(false) }
+  }
 
   const latest = snapshot?.latestBoot
   const measured = snapshot?.startupItems.filter((item) => item.measuredDelaySeconds != null) ?? []
@@ -46,15 +86,18 @@ export default function BootOptimizationCard() {
         <div className="boot-summary-row">
           <div><strong>{latest ? `${latest.totalSeconds.toFixed(1)}초` : '-'}</strong><span>최근 부팅</span></div>
           <div className="boot-compare">
-            <span>평소 <b>{snapshot?.averageBootSeconds?.toFixed(1) ?? '-'}초</b></span>
+            <span>평소 <b>{snapshot?.averageBootSeconds == null ? '-' : `${snapshot.averageBootSeconds.toFixed(1)}초`}</b></span>
             <span>변화 <b style={{ color: (snapshot?.improvementSeconds ?? 0) >= 0 ? '#22c55e' : '#f97316' }}>{snapshot?.improvementSeconds == null ? '-' : `${snapshot.improvementSeconds >= 0 ? '-' : '+'}${Math.abs(snapshot.improvementSeconds).toFixed(1)}초`}</b></span>
           </div>
         </div>
         {avoidableDelay > 0 && (
           <div className="avoidable-delay">끌 수 있는 항목의 실측 지연 합계 <strong>{avoidableDelay.toFixed(1)}초</strong></div>
         )}
+        {(loading || error || snapshot?.collectionError || snapshot?.bootLogStatus !== 'ready' || top.length === 0) && (
+          <p className="diag-help" role="status">{loading ? 'Windows 부팅 실측 기록을 분석하고 있습니다.' : error || measurementMessage(snapshot)}</p>
+        )}
         <div className="boot-top-items">
-          {top.length === 0 ? <span className="diag-empty-line">Windows 부팅 실측 기록을 분석하고 있습니다.</span> : top.map((item) => (
+          {top.map((item) => (
             <div key={item.id}>
               <i style={{ background: IMPACT_COLOR[item.impact] }} />
               <strong>{item.name}</strong>
@@ -62,7 +105,7 @@ export default function BootOptimizationCard() {
             </div>
           ))}
         </div>
-        <div className="diag-card-footer"><span>실측 항목 {measured.length}개 · 전체 {snapshot?.startupItems.length ?? 0}개</span></div>
+        <div className="diag-card-footer"><span>실측 항목 {measured.length}개 · 전체 {snapshot?.startupItems.length ?? 0}개</span><button className="text-button" disabled={loading} onClick={refresh}>{loading ? '조회 중…' : '새로 고침'}</button></div>
       </section>
 
       {showDetail && <BootDetailModal snapshot={snapshot} onUpdate={setSnapshot} onClose={() => setShowDetail(false)} />}
@@ -79,7 +122,7 @@ function BootDetailModal({
   onUpdate: (snapshot: BootOptimizationSnapshot) => void
   onClose: () => void
 }) {
-  const [filter, setFilter] = useState<ItemFilter>('measured')
+  const [filter, setFilter] = useState<ItemFilter>(() => snapshot?.startupItems.some((item) => item.measuredDelaySeconds != null) ? 'measured' : 'all')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -133,6 +176,7 @@ function BootDetailModal({
           <button onClick={onClose} aria-label="닫기">×</button>
         </header>
         <div className="diag-modal-scroll">
+          {snapshot && (snapshot.collectionError || snapshot.bootLogStatus !== 'ready') && <p className="diag-help" role="status">{measurementMessage(snapshot)}</p>}
           <section className="boot-stat-grid">
             <div><span>최근 부팅</span><strong>{stat ? `${stat.totalSeconds.toFixed(1)}초` : '-'}</strong></div>
             <div><span>로그인까지</span><strong>{stat ? `${stat.loginSeconds.toFixed(1)}초` : '-'}</strong></div>

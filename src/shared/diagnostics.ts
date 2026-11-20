@@ -84,7 +84,12 @@ export interface BootOptimizationChange {
   restoredAt: number | null
 }
 
+export type BootLogStatus = 'ready' | 'no-data' | 'disabled' | 'access-denied' | 'error'
+
 export interface BootOptimizationSnapshot {
+  bootLogStatus: BootLogStatus
+  bootLogError?: string
+  collectionError?: string
   checkedAt: number
   latestBoot: BootHistoryEntry | null
   averageBootSeconds: number | null
