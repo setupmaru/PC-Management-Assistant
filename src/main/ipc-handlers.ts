@@ -23,6 +23,8 @@ const RETIRED_API_HOSTS = new Set(['donas811.synology.me', 'pma-api.setupmaru.co
 const DEFAULT_LAN_API_BASE = 'http://192.168.0.119:3400/api'
 const REMOTE_API_REQUEST_TIMEOUT_MS = 12000
 const LOCAL_API_REQUEST_TIMEOUT_MS = 4000
+// The server waits up to 60 seconds for OpenAI, plus account checks and transport.
+const CHAT_API_REQUEST_TIMEOUT_MS = 75_000
 const REMOTE_HEALTHCHECK_TIMEOUT_MS = 8000
 const LOCAL_HEALTHCHECK_TIMEOUT_MS = 1500
 const CONFIG_BASENAME = 'pc-assistant.config.json'
@@ -293,6 +295,7 @@ class ApiFetchError extends Error {
 }
 
 async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const isChatCompletion = path === '/chat/completions'
   const bases = getApiBaseCandidates()
   if (bases.length === 0) {
     throw new Error('API base is not configured. Set API_BASE or PUBLIC_BASE_URL.')
@@ -302,7 +305,8 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
 
   for (const base of bases) {
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), getRequestTimeoutMs(base))
+    const timeoutId = setTimeout(() => controller.abort(),
+      isChatCompletion ? CHAT_API_REQUEST_TIMEOUT_MS : getRequestTimeoutMs(base))
 
     try {
       const response = await performApiRequest(buildUrl(base, path), {
@@ -312,6 +316,14 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
       lastReachableApiBase = base
       return response
     } catch (err) {
+      // Replaying a chat POST can generate another answer and consume quota again.
+      // Keep the original failure instead of replacing it with a fallback error.
+      if (isChatCompletion) {
+        if (controller.signal.aborted) {
+          throw new Error('AI 응답 대기시간을 초과했습니다. 잠시 후 다시 시도해주세요.')
+        }
+        throw new ApiFetchError(base, err, [base])
+      }
       lastError = err
     } finally {
       clearTimeout(timeoutId)
@@ -918,7 +930,10 @@ export function registerIpcHandlers(
       })
       return { success: true }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err)
+      console.error('[chat] Request failed:', err)
+      const errorMsg = err instanceof ApiFetchError
+        ? 'AI 서버에 연결하지 못했습니다. 네트워크 연결을 확인한 뒤 다시 시도해주세요.'
+        : err instanceof Error ? err.message : String(err)
       win.webContents.send('chat:streamChunk', {
         text: `\n\n> **오류**: ${errorMsg}`,
         done: true,
