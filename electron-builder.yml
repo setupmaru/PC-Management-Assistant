@@ -1,6 +1,6 @@
 appId: com.pcmanagement.assistant
 productName: PC Management Assistant
-buildVersion: "1.0.19.1"
+buildVersion: "1.0.20"
 detectUpdateChannel: false
 directories:
   buildResources: resources
