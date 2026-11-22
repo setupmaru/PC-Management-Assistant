@@ -1,4 +1,9 @@
-import si from 'systeminformation'
+import { execFile } from 'child_process'
+import { readdir, stat } from 'fs/promises'
+import { freemem, totalmem } from 'os'
+import { isAbsolute, join } from 'path'
+import { promisify } from 'util'
+import si, { Systeminformation } from 'systeminformation'
 import { runPowerShell } from '../utils/powershell'
 
 export interface CpuMetrics {
@@ -50,19 +55,53 @@ export interface SystemMetrics {
   timestamp: number
 }
 
-let warmedUp = false
 let lastGpu: GpuMetrics | null = null
 let lastGpuCollectedAt = 0
 let gpuCollection: Promise<GpuMetrics | null> | null = null
-const GPU_POLL_INTERVAL = 10_000
+const GPU_POLL_INTERVAL = 15_000
+const GPU_INVENTORY_INTERVAL = 10 * 60_000
+const execFileAsync = promisify(execFile)
+
+type GpuDevice = Pick<GpuMetrics, 'model' | 'vendor' | 'memoryTotalMb'>
+
+function cacheSample<T>(read: () => Promise<T>, intervalMs: number): () => Promise<T> {
+  let sample: Promise<T> | undefined
+  let sampledAt = 0
+  return () => {
+    if (!sample || Date.now() - sampledAt >= intervalMs) {
+      sampledAt = Date.now()
+      sample = read().catch((error) => {
+        sample = undefined
+        throw error
+      })
+    }
+    return sample
+  }
+}
+
+// These probes can run system commands even though their data changes slowly.
+const readCpuInfo = cacheSample(() => si.cpu(), 60_000)
+const readCpuTemperature = cacheSample(() => si.cpuTemperature(), 30_000)
+const readDisks = cacheSample(() => si.fsSize(), 30_000)
+const readNetworkStats = process.platform === 'win32'
+  ? cacheSample(() => si.networkStats(), 10_000)
+  : () => si.networkStats()
+
+async function readMemory() {
+  if (process.platform !== 'win32') return si.mem()
+
+  // systeminformation uses these same values for physical RAM on Windows.
+  // Its additional PowerShell query reads page file data this app doesn't display.
+  const total = totalmem()
+  const free = freemem()
+  return { total, free, used: total - free }
+}
 
 function toFiniteNumber(value: number | null | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
 async function collectWindowsGpuUsage(): Promise<number | undefined> {
-  if (process.platform !== 'win32') return undefined
-
   try {
     const output = await runPowerShell(`
 $samples = Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine |
@@ -79,6 +118,120 @@ if ($null -ne $total) {
   }
 }
 
+function selectGpu(controllers: Systeminformation.GraphicsControllerData[]) {
+  const score = (controller: Systeminformation.GraphicsControllerData) => {
+    const hasLiveUsage = toFiniteNumber(controller.utilizationGpu) !== undefined ? 1_000_000 : 0
+    const dedicatedMemory = toFiniteNumber(controller.memoryTotal) ?? toFiniteNumber(controller.vram) ?? 0
+    const isDedicated = controller.vramDynamic ? 0 : 100_000
+    return hasLiveUsage + isDedicated + dedicatedMemory
+  }
+  return controllers
+    .filter((controller) => controller.model && !/microsoft basic/i.test(`${controller.vendor} ${controller.model}`))
+    .sort((a, b) => score(b) - score(a))[0]
+}
+
+function getGpuDevice(controller: Systeminformation.GraphicsControllerData): GpuDevice {
+  const memoryTotal = toFiniteNumber(controller.memoryTotal) ?? toFiniteNumber(controller.vram)
+  return {
+    model: controller.name || controller.model,
+    vendor: controller.vendor || undefined,
+    memoryTotalMb: memoryTotal && memoryTotal > 0 ? Math.round(memoryTotal) : undefined,
+  }
+}
+
+function isNvidia(controller: Systeminformation.GraphicsControllerData): boolean {
+  return /nvidia/i.test(`${controller.vendor} ${controller.model}`)
+}
+
+async function findNvidiaSmi(): Promise<string | undefined> {
+  const windows = process.env.SystemRoot || process.env.WINDIR || ''
+  const programs = process.env.ProgramW6432 || process.env.ProgramFiles || ''
+  const system32 = isAbsolute(windows) ? join(windows, 'System32') : undefined
+  const directories = [system32, isAbsolute(programs) ? join(programs, 'NVIDIA Corporation', 'NVSMI') : undefined]
+  for (const dir of directories) {
+    if (!dir) continue
+    const exe = join(dir, 'nvidia-smi.exe')
+    if ((await stat(exe).catch(() => undefined))?.isFile()) return exe
+  }
+
+  if (!system32) return undefined
+  const store = join(system32, 'DriverStore', 'FileRepository')
+  const entries = await readdir(store, { withFileTypes: true }).catch(() => [])
+  let newest: { exe: string; modified: number } | undefined
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !/^nv.*\.inf_/i.test(entry.name)) continue
+    const exe = join(store, entry.name, 'nvidia-smi.exe')
+    const file = await stat(exe).catch(() => undefined)
+    if (file?.isFile() && (!newest || file.mtimeMs > newest.modified)) {
+      newest = { exe, modified: file.mtimeMs }
+    }
+  }
+  return newest?.exe
+}
+
+const readWindowsGpuDevice = cacheSample(async () => {
+  const { controllers } = await si.graphics()
+  const controller = selectGpu(controllers)
+  if (!controller) return null
+
+  const pciBus = controller.pciBus && /^(?:[0-9a-f]{4}|[0-9a-f]{8}):[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]$/i.test(controller.pciBus)
+    ? controller.pciBus
+    : undefined
+  // Only allow a query without a PCI ID if there is a single NVIDIA card.
+  const nvidiaSmi = isNvidia(controller) && (pciBus || controllers.filter(isNvidia).length === 1)
+    ? await findNvidiaSmi()
+    : undefined
+  return { ...getGpuDevice(controller), nvidiaSmi, pciBus }
+}, GPU_INVENTORY_INTERVAL)
+
+async function readNvidiaGpu(exe: string, pciBus: string | undefined): Promise<Array<number | undefined>> {
+  try {
+    const args = ['--query-gpu=utilization.gpu,memory.used,temperature.gpu', '--format=csv,noheader,nounits']
+    if (pciBus) args.push(`--id=${pciBus}`)
+    const { stdout } = await execFileAsync(exe, args, { windowsHide: true, timeout: 5_000, encoding: 'utf8' })
+    const rows = stdout.trim().split(/\r?\n/)
+    if (rows.length !== 1) return []
+    const fields = rows[0].split(',').map(field => field.trim())
+    if (fields.length !== 3) return []
+    return fields.map(field => field ? toFiniteNumber(Number(field)) : undefined)
+  } catch {
+    return []
+  }
+}
+
+function withGpuUsage(device: GpuDevice, usage?: number, memoryUsed?: number, temperature?: number): GpuMetrics {
+  return {
+    model: device.model,
+    vendor: device.vendor,
+    memoryTotalMb: device.memoryTotalMb,
+    usage: usage === undefined ? null : Math.round(Math.min(100, Math.max(0, usage))),
+    memoryUsedMb: memoryUsed !== undefined && memoryUsed >= 0 ? Math.round(memoryUsed) : undefined,
+    temperature: temperature && temperature > 0 ? Math.round(temperature) : undefined,
+  }
+}
+
+async function sampleGpu(): Promise<GpuMetrics | null> {
+  if (process.platform === 'win32') {
+    const device = await readWindowsGpuDevice()
+    if (!device) return null
+
+    const [usage, memoryUsed, temperature] = device.nvidiaSmi
+      ? await readNvidiaGpu(device.nvidiaSmi, device.pciBus)
+      : []
+    return withGpuUsage(device, usage ?? await collectWindowsGpuUsage(), memoryUsed, temperature)
+  }
+
+  const { controllers } = await si.graphics()
+  const controller = selectGpu(controllers)
+  if (!controller) return null
+  return withGpuUsage(
+    getGpuDevice(controller),
+    toFiniteNumber(controller.utilizationGpu),
+    toFiniteNumber(controller.memoryUsed),
+    toFiniteNumber(controller.temperatureGpu),
+  )
+}
+
 async function collectGpuMetrics(): Promise<GpuMetrics | null> {
   const now = Date.now()
   if (lastGpuCollectedAt > 0 && now - lastGpuCollectedAt < GPU_POLL_INTERVAL) {
@@ -86,39 +239,7 @@ async function collectGpuMetrics(): Promise<GpuMetrics | null> {
   }
   if (gpuCollection) return gpuCollection
 
-  gpuCollection = Promise.all([si.graphics(), collectWindowsGpuUsage()])
-    .then(([{ controllers }, windowsUsage]) => {
-      const candidates = controllers.filter((controller) => {
-        const name = `${controller.vendor} ${controller.model}`.toLowerCase()
-        return controller.model && !name.includes('microsoft basic')
-      })
-
-      const controller = candidates.sort((a, b) => {
-        const score = (item: typeof a) => {
-          const hasLiveUsage = toFiniteNumber(item.utilizationGpu) !== undefined ? 1_000_000 : 0
-          const dedicatedMemory = toFiniteNumber(item.memoryTotal) ?? toFiniteNumber(item.vram) ?? 0
-          const isDedicated = item.vramDynamic ? 0 : 100_000
-          return hasLiveUsage + isDedicated + dedicatedMemory
-        }
-        return score(b) - score(a)
-      })[0]
-
-      if (!controller) return null
-
-      const rawUsage = toFiniteNumber(controller.utilizationGpu) ?? windowsUsage
-      const rawTemperature = toFiniteNumber(controller.temperatureGpu)
-      const rawMemoryTotal = toFiniteNumber(controller.memoryTotal) ?? toFiniteNumber(controller.vram)
-      const rawMemoryUsed = toFiniteNumber(controller.memoryUsed)
-
-      return {
-        usage: rawUsage === undefined ? null : Math.round(Math.min(100, Math.max(0, rawUsage))),
-        model: controller.name || controller.model,
-        vendor: controller.vendor || undefined,
-        memoryTotalMb: rawMemoryTotal && rawMemoryTotal > 0 ? Math.round(rawMemoryTotal) : undefined,
-        memoryUsedMb: rawMemoryUsed !== undefined && rawMemoryUsed >= 0 ? Math.round(rawMemoryUsed) : undefined,
-        temperature: rawTemperature && rawTemperature > 0 ? Math.round(rawTemperature) : undefined,
-      }
-    })
+  gpuCollection = sampleGpu()
     .catch(() => lastGpu)
     .then((gpu) => {
       lastGpu = gpu
@@ -132,27 +253,14 @@ async function collectGpuMetrics(): Promise<GpuMetrics | null> {
   return gpuCollection
 }
 
-export async function warmupSystemInfo(): Promise<void> {
-  if (warmedUp) return
-  try {
-    await Promise.all([
-      si.currentLoad(),
-      si.mem(),
-    ])
-    warmedUp = true
-  } catch {
-    // ignore warmup errors
-  }
-}
-
 export async function collectSystemMetrics(): Promise<SystemMetrics> {
   const [load, mem, fsSize, networkStats, cpuData, temp, gpuData] = await Promise.allSettled([
     si.currentLoad(),
-    si.mem(),
-    si.fsSize(),
-    si.networkStats(),
-    si.cpu(),
-    si.cpuTemperature(),
+    readMemory(),
+    readDisks(),
+    readNetworkStats(),
+    readCpuInfo(),
+    readCpuTemperature(),
     collectGpuMetrics(),
   ])
 
@@ -175,7 +283,7 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
     total: memData?.total ?? 0,
     used: memData?.used ?? 0,
     free: memData?.free ?? 0,
-    usagePercent: memData ? Math.round((memData.used / memData.total) * 100) : 0,
+    usagePercent: memData?.total ? Math.round((memData.used / memData.total) * 100) : 0,
   }
 
   const diskData = fsSize.status === 'fulfilled' ? fsSize.value : []

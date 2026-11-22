@@ -1,5 +1,5 @@
 ﻿import { BrowserWindow } from 'electron'
-import { collectSystemMetrics, warmupSystemInfo, SystemMetrics } from './system-metrics'
+import { collectSystemMetrics, SystemMetrics } from './system-metrics'
 import { collectTopProcesses, ProcessInfo } from './process-collector'
 import { EventLogCollector, EventLogResult } from './event-log-collector'
 import { WindowsUpdateCollector, WindowsUpdateResult } from './windows-update-collector'
@@ -20,6 +20,10 @@ export interface FullSnapshot {
   windowsUpdate: WindowsUpdateResult
 }
 
+const FOREGROUND_METRICS_INTERVAL_MS = 3_000
+const BACKGROUND_METRICS_INTERVAL_MS = 60_000
+const PROCESS_INTERVAL_MS = 10_000
+
 export class DataCollectorService {
   private readonly isWindows = process.platform === 'win32'
   private win: BrowserWindow | null = null
@@ -30,17 +34,24 @@ export class DataCollectorService {
   private bootOptimizer = new BootOptimizerService()
 
   private metricsTimer: ReturnType<typeof setInterval> | null = null
-  private slowTimer: ReturnType<typeof setInterval> | null = null
+  private processesTimer: ReturnType<typeof setInterval> | null = null
   private eventTimer: ReturnType<typeof setInterval> | null = null
   private updateTimer: ReturnType<typeof setInterval> | null = null
   private autoUpdateApplyTimer: ReturnType<typeof setInterval> | null = null
 
   private lastMetrics: SystemMetrics | null = null
   private lastProcesses: ProcessInfo[] = []
+  private dashboardVisible: boolean | null = null
+  private metricsCollection: Promise<SystemMetrics> | null = null
+  private processCollection: Promise<ProcessInfo[]> | null = null
 
   async initialize(win: BrowserWindow): Promise<void> {
     this.win = win
-    await warmupSystemInfo()
+    win.on('show', this.updateDashboardPolling)
+      .on('hide', this.updateDashboardPolling)
+      .on('minimize', this.updateDashboardPolling)
+      .on('restore', this.updateDashboardPolling)
+    this.updateDashboardPolling()
 
     if (this.isWindows) {
       this.bootOptimizer.initialize((snapshot) => {
@@ -50,27 +61,6 @@ export class DataCollectorService {
         this.win?.webContents.send('diagnostics:networkUpdate', snapshot)
       }, () => this.bootOptimizer.createMarkdownReport()).catch(() => {})
     }
-
-    this.metricsTimer = setInterval(async () => {
-      try {
-        this.lastMetrics = await collectSystemMetrics()
-        this.win?.webContents.send('system:metricsUpdate', {
-          metrics: this.lastMetrics,
-          processes: this.lastProcesses,
-        })
-      } catch {
-        // ignore metrics errors
-      }
-    }, 3000)
-
-    this.slowTimer = setInterval(async () => {
-      try {
-        this.lastProcesses = await collectTopProcesses()
-        this.win?.webContents.send('system:processesUpdate', this.lastProcesses)
-      } catch {
-        // ignore process errors
-      }
-    }, 10000)
 
     if (this.isWindows) {
       this.eventTimer = setInterval(async () => {
@@ -108,13 +98,8 @@ export class DataCollectorService {
       }, 6 * 60 * 60 * 1000)
     }
 
-    this.lastMetrics = await collectSystemMetrics()
-    this.lastProcesses = await collectTopProcesses()
-    this.win?.webContents.send('system:metricsUpdate', {
-      metrics: this.lastMetrics,
-      processes: this.lastProcesses,
-    })
-    if (this.isWindows) {
+    await this.metricsCollection?.catch(() => {})
+    if (this.isWindows && this.win) {
       await this.eventLogCollector.collect(true)
 
       this.win?.webContents.send('system:windowsUpdateUpdate', {
@@ -129,16 +114,75 @@ export class DataCollectorService {
     }
   }
 
+  private updateDashboardPolling = (): void => {
+    const win = this.win
+    if (!win || win.isDestroyed()) return
+    const visible = win.isVisible() && !win.isMinimized()
+    if (visible === this.dashboardVisible) return
+    const firstSample = this.dashboardVisible === null
+    this.stopDashboardPolling()
+    this.dashboardVisible = visible
+
+    const pollMetrics = () => {
+      if (!this.metricsCollection) void this.sampleMetrics().catch(() => {})
+    }
+    this.metricsTimer = setInterval(pollMetrics, visible
+      ? FOREGROUND_METRICS_INTERVAL_MS
+      : BACKGROUND_METRICS_INTERVAL_MS)
+
+    if (visible) {
+      const pollProcesses = () => {
+        if (!this.processCollection) void this.sampleProcesses().catch(() => {})
+      }
+      this.processesTimer = setInterval(pollProcesses, PROCESS_INTERVAL_MS)
+      pollProcesses()
+    }
+    if (visible || firstSample) pollMetrics()
+  }
+
+  private stopDashboardPolling(): void {
+    if (this.metricsTimer) clearInterval(this.metricsTimer)
+    if (this.processesTimer) clearInterval(this.processesTimer)
+    this.metricsTimer = null
+    this.processesTimer = null
+  }
+
+  private sampleMetrics(): Promise<SystemMetrics> {
+    if (!this.metricsCollection) {
+      this.metricsCollection = collectSystemMetrics().then((metrics) => {
+        this.lastMetrics = metrics
+        this.sendDashboardUpdate('system:metricsUpdate', { metrics })
+        return metrics
+      }).finally(() => { this.metricsCollection = null })
+    }
+    return this.metricsCollection
+  }
+
+  private sampleProcesses(): Promise<ProcessInfo[]> {
+    if (!this.processCollection) {
+      this.processCollection = collectTopProcesses().then((processes) => {
+        this.lastProcesses = processes
+        this.sendDashboardUpdate('system:processesUpdate', processes)
+        return processes
+      }).finally(() => { this.processCollection = null })
+    }
+    return this.processCollection
+  }
+
+  private sendDashboardUpdate(channel: string, data: unknown): void {
+    if (this.dashboardVisible && this.win && !this.win.isDestroyed()) {
+      this.win.webContents.send(channel, data)
+    }
+  }
+
   async getFreshSnapshot(): Promise<FullSnapshot> {
     const [metrics, processes, events] = await Promise.all([
-      collectSystemMetrics(),
-      collectTopProcesses(),
+      this.sampleMetrics(),
+      this.sampleProcesses(),
       this.isWindows
         ? this.eventLogCollector.collect()
         : Promise.resolve(this.eventLogCollector.getLastResult()),
     ])
-    this.lastMetrics = metrics
-    this.lastProcesses = processes
     return {
       metrics,
       processes,
@@ -240,8 +284,11 @@ export class DataCollectorService {
   }
 
   destroy(): void {
-    if (this.metricsTimer) clearInterval(this.metricsTimer)
-    if (this.slowTimer) clearInterval(this.slowTimer)
+    this.win?.off('show', this.updateDashboardPolling)
+      .off('hide', this.updateDashboardPolling)
+      .off('minimize', this.updateDashboardPolling)
+      .off('restore', this.updateDashboardPolling)
+    this.stopDashboardPolling()
     if (this.eventTimer) clearInterval(this.eventTimer)
     if (this.updateTimer) clearInterval(this.updateTimer)
     if (this.autoUpdateApplyTimer) clearInterval(this.autoUpdateApplyTimer)

@@ -23,6 +23,12 @@ export interface EventLogResult {
 const GET_EVENTS_SCRIPT = `
 $ErrorActionPreference = 'SilentlyContinue'
 $results = @()
+$hasSecurityLog = $false
+
+try {
+  $null = Get-WinEvent -LogName Security -MaxEvents 1 -ErrorAction Stop
+  $hasSecurityLog = $true
+} catch {}
 
 # System + Application 로그 (일반 사용자 접근 가능)
 try {
@@ -37,17 +43,10 @@ try {
   }
 } catch {}
 
-$results | ConvertTo-Json -Compress -Depth 3
-`
-
-const CHECK_SECURITY_SCRIPT = `
-$ErrorActionPreference = 'SilentlyContinue'
-try {
-  $ev = Get-WinEvent -LogName Security -MaxEvents 1 -ErrorAction Stop
-  Write-Output 'true'
-} catch {
-  Write-Output 'false'
-}
+[PSCustomObject]@{
+  events = @($results)
+  hasSecurityLog = $hasSecurityLog
+} | ConvertTo-Json -Compress -Depth 4
 `
 
 export class EventLogCollector {
@@ -67,27 +66,18 @@ export class EventLogCollector {
     }
 
     try {
-      const [eventsJson, securityCheck] = await Promise.allSettled([
-        runPowerShell(GET_EVENTS_SCRIPT, 20000),
-        runPowerShell(CHECK_SECURITY_SCRIPT, 5000),
-      ])
-
       let events: WindowsEvent[] = []
+      let hasSecurityLog = this.lastResult.hasSecurityLog
       let error: string | undefined
 
-      if (eventsJson.status === 'fulfilled' && eventsJson.value) {
-        try {
-          const parsed = JSON.parse(eventsJson.value)
-          events = Array.isArray(parsed) ? parsed : [parsed]
-        } catch {
-          events = []
-        }
-      } else if (eventsJson.status === 'rejected') {
+      try {
+        const output = await runPowerShell(GET_EVENTS_SCRIPT, 20_000)
+        const result = JSON.parse(output) as Pick<EventLogResult, 'events' | 'hasSecurityLog'>
+        events = Array.isArray(result.events) ? result.events : []
+        hasSecurityLog = result.hasSecurityLog === true
+      } catch {
         error = 'Windows 이벤트 로그 수집 실패'
       }
-
-      const hasSecurityLog =
-        securityCheck.status === 'fulfilled' && securityCheck.value.trim() === 'true'
 
       const autoRepair = await this.autoRepairService.process(events)
       this.lastResult = { events, error, hasSecurityLog, autoRepair }

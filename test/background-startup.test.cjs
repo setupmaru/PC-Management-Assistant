@@ -16,7 +16,7 @@ async function launch(options = {}) {
   const state = {
     windows: [], trays: [], registrations: [], loginQueries: [], iconPaths: [], errors: [],
     configured: options.configured ?? false,
-    initialized: 0, destroyed: 0, warmedUp: 0, quitCalls: 0, savedBounds: 0, dialogs: 0,
+    initialized: 0, destroyed: 0, quitCalls: 0, savedBounds: 0, dialogs: 0,
     settings: {
       openAtLogin: false, executableWillLaunchAtLogin: false, wasOpenedAtLogin: false,
       ...options.settings,
@@ -114,7 +114,6 @@ async function launch(options = {}) {
     } },
     './claude/client': { ClaudeService: class { setWindow() {} } },
     './ipc-handlers': { registerIpcHandlers() {} },
-    './collectors/system-metrics': { warmupSystemInfo: async () => { state.warmedUp++ } },
     './updater': { AppUpdater: class { initialize() {}; setWindow() {} } },
     './store': {
       loadLoginItemConfigured: () => state.configured,
@@ -260,7 +259,6 @@ test('losing the single-instance lock exits before creating windows, tray or col
   assert.equal(run.windows.length, 0)
   assert.equal(run.trays.length, 0)
   assert.equal(run.state.initialized, 0)
-  assert.equal(run.state.warmedUp, 0)
   assert.equal(run.registrations.length, 0)
   assert.equal(run.state.quitCalls, 1)
 })

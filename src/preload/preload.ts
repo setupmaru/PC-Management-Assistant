@@ -290,8 +290,8 @@ const api = {
     },
   },
 
-  onMetricsUpdate: (cb: (data: SystemMetricsUpdate) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, data: SystemMetricsUpdate) => cb(data)
+  onMetricsUpdate: (cb: (data: Pick<SystemMetricsUpdate, 'metrics'>) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, data: Pick<SystemMetricsUpdate, 'metrics'>) => cb(data)
     ipcRenderer.on('system:metricsUpdate', handler)
     return () => ipcRenderer.removeListener('system:metricsUpdate', handler)
   },

@@ -18,7 +18,6 @@ export function useSystemMetrics() {
     // 실시간 업데이트 구독
     const unsubMetrics = window.api.onMetricsUpdate((data) => {
       setMetrics(data.metrics)
-      if (data.processes) setProcesses(data.processes)
     })
 
     const unsubProcesses = window.api.onProcessesUpdate((processes) => {

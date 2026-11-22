@@ -5,7 +5,6 @@ import { DataCollectorService } from './collectors'
 import { ClaudeService } from './claude/client'
 import { registerIpcHandlers } from './ipc-handlers'
 import { clearLegacyApiKey, loadLoginItemConfigured, loadWindowBounds, saveLoginItemConfigured, saveWindowBounds } from './store'
-import { warmupSystemInfo } from './collectors/system-metrics'
 import { AppUpdater } from './updater'
 
 try {
@@ -216,7 +215,6 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   app.whenReady().then(async () => {
-    void warmupSystemInfo().catch(() => {})
     shouldShowWindow = shouldShowWindow || !shouldStartInBackground()
     try {
       createTray()
