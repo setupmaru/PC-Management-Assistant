@@ -1,10 +1,10 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell, Tray } from 'electron'
 import { join } from 'path'
 import dotenv from 'dotenv'
 import { DataCollectorService } from './collectors'
 import { ClaudeService } from './claude/client'
 import { registerIpcHandlers } from './ipc-handlers'
-import { clearLegacyApiKey, loadWindowBounds, saveWindowBounds } from './store'
+import { clearLegacyApiKey, loadLoginItemConfigured, loadWindowBounds, saveLoginItemConfigured, saveWindowBounds } from './store'
 import { warmupSystemInfo } from './collectors/system-metrics'
 import { AppUpdater } from './updater'
 
@@ -19,13 +19,102 @@ const isDev = process.env.FORCE_PROD === '1'
   : (process.env.NODE_ENV === 'development' || !app.isPackaged)
 
 let mainWindow: BrowserWindow | null = null
+let tray: Tray | null = null
+let isQuitting = false
+let windowReady = false
+let shouldShowWindow = false
+const BACKGROUND_ARG = '--background'
 const collector = new DataCollectorService()
 const claude = new ClaudeService()
 const updater = new AppUpdater()
 let windowControlHandlersRegistered = false
 
-// ??以鍮꾨릺??利됱떆 warmup ?쒖옉 (?덈룄???앹꽦怨?蹂묐젹)
-app.whenReady().then(() => { warmupSystemInfo().catch(() => {}) })
+function supportsLoginItems(): boolean {
+  return app.isPackaged && (process.platform === 'win32' || process.platform === 'darwin')
+}
+
+function loginItemOptions(): { path?: string; args?: string[] } {
+  return process.platform === 'win32'
+    ? { path: process.execPath, args: [BACKGROUND_ARG] }
+    : {}
+}
+
+function setLaunchAtLogin(enabled: boolean): void {
+  app.setLoginItemSettings({ ...loginItemOptions(), openAtLogin: enabled })
+  saveLoginItemConfigured()
+}
+
+function isLaunchAtLoginEnabled(): boolean {
+  if (!supportsLoginItems()) return false
+  try {
+    const settings = app.getLoginItemSettings(loginItemOptions())
+    return settings.openAtLogin
+      && (process.platform !== 'win32' || settings.executableWillLaunchAtLogin)
+  } catch (error) {
+    console.error('[startup] Failed to read login item:', error)
+    return false
+  }
+}
+
+function shouldStartInBackground(): boolean {
+  if (process.argv.includes(BACKGROUND_ARG)) return true
+  if (process.platform !== 'darwin') return false
+  try {
+    return app.getLoginItemSettings().wasOpenedAtLogin
+  } catch (error) {
+    console.error('[startup] Failed to read launch origin:', error)
+    return false
+  }
+}
+
+function showMainWindow(): void {
+  if (isQuitting) return
+  shouldShowWindow = true
+  if (!windowReady || !mainWindow || mainWindow.isDestroyed()) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function updateTrayMenu(): void {
+  tray?.setContextMenu(Menu.buildFromTemplate([
+    { label: 'PC Management Assistant 열기', click: showMainWindow },
+    {
+      label: '로그인 시 자동 실행',
+      type: 'checkbox',
+      enabled: supportsLoginItems(),
+      checked: isLaunchAtLoginEnabled(),
+      click: (item) => {
+        try {
+          setLaunchAtLogin(item.checked)
+        } catch (error) {
+          console.error('[startup] Failed to change login item:', error)
+          dialog.showErrorBox('자동 실행 설정 실패', '로그인 시 자동 실행 설정을 변경하지 못했습니다.')
+        }
+        updateTrayMenu()
+      },
+    },
+    { type: 'separator' },
+    { label: '종료', click: () => app.quit() },
+  ]))
+}
+
+function createTray(): void {
+  const iconName = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
+  const iconPath = app.isPackaged
+    ? join(process.resourcesPath, iconName)
+    : join(app.getAppPath(), 'resources', iconName)
+  let icon = nativeImage.createFromPath(iconPath)
+  if (icon.isEmpty()) throw new Error(`Tray icon not found: ${iconPath}`)
+  if (process.platform === 'darwin') {
+    icon = icon.resize({ width: 16, height: 16 })
+    icon.setTemplateImage(true)
+  }
+  tray = new Tray(icon)
+  tray.setToolTip('PC Management Assistant')
+  tray.on('double-click', showMainWindow)
+  if (process.platform !== 'darwin') tray.on('click', showMainWindow)
+}
 
 function createWindow(): BrowserWindow {
   const savedBounds = loadWindowBounds()
@@ -52,8 +141,8 @@ function createWindow(): BrowserWindow {
     center: true,
   })
   win.once('ready-to-show', () => {
-    win.show()
-    win.focus()
+    windowReady = true
+    if (shouldShowWindow) showMainWindow()
   })
 
   // ?몃? 留곹겕??湲곕낯 釉뚮씪?곗?濡??닿린
@@ -69,9 +158,21 @@ function createWindow(): BrowserWindow {
     win.loadFile(join(__dirname, '../dist/index.html'))
   }
 
-  win.on('close', () => {
+  win.on('close', (event) => {
     const bounds = win.getBounds()
     saveWindowBounds(bounds)
+    if (!isQuitting && tray && !tray.isDestroyed()) {
+      event.preventDefault()
+      shouldShowWindow = false
+      win.hide()
+    }
+  })
+
+  // Windows shutdown/logoff must be allowed to close the hidden window.
+  win.on('session-end', () => { isQuitting = true })
+  win.on('closed', () => {
+    mainWindow = null
+    windowReady = false
   })
 
   updater.setWindow(win)
@@ -99,34 +200,66 @@ function registerWindowControlHandlers(): void {
   })
 }
 
-app.whenReady().then(async () => {
-  registerWindowControlHandlers()
-  mainWindow = createWindow()
-  updater.initialize(isDev)
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', (_event, argv) => {
+    if (!argv.includes(BACKGROUND_ARG)) showMainWindow()
+  })
 
-  clearLegacyApiKey()
-  claude.setWindow(mainWindow)
+  app.on('before-quit', () => { isQuitting = true })
+  nativeAutoUpdater.on('before-quit-for-update', () => { isQuitting = true })
+  app.on('will-quit', () => {
+    collector.destroy()
+    tray?.destroy()
+    tray = null
+  })
 
-  // IPC ?몃뱾?щ? 癒쇱? ?깅줉 (renderer媛 ready-to-show ?꾩뿉 ?몄텧?????덉쓬)
-  registerIpcHandlers(mainWindow, collector, claude)
+  app.whenReady().then(async () => {
+    void warmupSystemInfo().catch(() => {})
+    shouldShowWindow = shouldShowWindow || !shouldStartInBackground()
+    try {
+      createTray()
+      updateTrayMenu()
+    } catch (error) {
+      console.error('[startup] Tray setup failed:', error)
+      tray?.destroy()
+      tray = null
+    }
+    if (!tray) shouldShowWindow = true
 
-  // ?곗씠???섏쭛 ?쒖옉
-  try {
-    await collector.initialize(mainWindow)
-  } catch (err) {
-    console.error('[main] collector initialize failed:', err)
-  }
+    // Register only once so later launches respect changes made in OS settings.
+    if (tray && supportsLoginItems() && !loadLoginItemConfigured()) {
+      try {
+        setLaunchAtLogin(true)
+        updateTrayMenu()
+      } catch (error) {
+        console.error('[startup] Failed to register login item:', error)
+      }
+    }
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      mainWindow = createWindow()
+    registerWindowControlHandlers()
+    mainWindow = createWindow()
+    updater.initialize(isDev)
+
+    clearLegacyApiKey()
+    claude.setWindow(mainWindow)
+
+    // Register IPC before the renderer can send requests.
+    registerIpcHandlers(mainWindow, collector, claude)
+
+    app.on('activate', showMainWindow)
+
+    try {
+      await collector.initialize(mainWindow)
+    } catch (err) {
+      console.error('[main] collector initialize failed:', err)
     }
   })
-})
+}
 
 app.on('window-all-closed', () => {
-  collector.destroy()
-  if (process.platform !== 'darwin') app.quit()
+  app.quit()
 })
 
 function isLocalAppUrl(url: string): boolean {

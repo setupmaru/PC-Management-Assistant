@@ -8,6 +8,7 @@ interface StoreSchema {
   encryptedRefreshToken?: string
   deviceId?: string
   windowBounds?: { x: number; y: number; width: number; height: number }
+  loginItemConfigured?: boolean
   theme?: 'dark' | 'light'
   eventAutoRepairEnabled?: boolean
   eventAutoRepairHistory?: EventAutoRepairHistoryEntry[]
@@ -119,4 +120,12 @@ export function saveWindowBounds(bounds: StoreSchema['windowBounds']): void {
 
 export function loadWindowBounds(): StoreSchema['windowBounds'] {
   return getStore().get('windowBounds')
+}
+
+export function loadLoginItemConfigured(): boolean {
+  return getStore().get('loginItemConfigured') === true
+}
+
+export function saveLoginItemConfigured(): void {
+  getStore().set('loginItemConfigured', true)
 }
